@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Sequences>
+
+    <Vertical>
+        <Span size="16dp"/>
+        <Span id="title_account" size="wrap"/>
+        <Span size="2dp"/>
+        <Span id="account" size="wrap"/>
+        <Span size="12dp"/>
+        <Span id="newaccount" size="wrap"/>
+        <Span size="2dp"/>
+        <Span id="frommnemonic" size="wrap"/>
+
+        <Span size="48dp"/>
+
+        <Span id="title_phonenumber" size="wrap"/>
+        <Span size="2dp"/>
+        <Span id="phonenumber" size="wrap"/>
+        <Span size="12dp"/>
+        <Span id="setphonenumber" size="wrap"/>
+
+        <Span size="48dp"/>
+
+        <Span id="title_mnemonic" size="wrap"/>
+        <Span size="2dp"/>
+        <Span id="mnemonic" size="wrap"/>
+
+        <Span size="16dp"/>
+    </Vertical>
+
+    <Horizontal>
+        <Span size="16dp"/>
+        <Span id="title_account" size="wrap"/>
+    </Horizontal>
+
+    <Horizontal>
+        <Span size="16dp"/>
+        <Span id="account" size="wrap"/>
+    </Horizontal>
+
+    <Horizontal>
+        <Span size="16dp"/>
+        <Span id="newaccount" size="1w"/>
+        <Span size="16dp"/>
+    </Horizontal>
+
+    <Horizontal>
+        <Span size="16dp"/>
+        <Span id="frommnemonic" size="1w"/>
+        <Span size="16dp"/>
+    </Horizontal>
+
+    <Horizontal>
+        <Span size="16dp"/>
+        <Span id="title_phonenumber" size="wrap"/>
+    </Horizontal>
+
+    <Horizontal>
+        <Span size="16dp"/>
+        <Span id="phonenumber" size="wrap"/>
+    </Horizontal>
+
+    <Horizontal>
+        <Span size="16dp"/>
+        <Span id="setphonenumber" size="1w"/>
+        <Span size="16dp"/>
+    </Horizontal>
+
+    <Horizontal>
+        <Span size="16dp"/>
+        <Span id="title_mnemonic" size="wrap"/>
+    </Horizontal>
+
+    <Horizontal>
+        <Span size="16dp"/>
+        <Span id="mnemonic" size="1w"/>
+        <Span size="16dp"/>
+    </Horizontal>
+
+</Sequences>

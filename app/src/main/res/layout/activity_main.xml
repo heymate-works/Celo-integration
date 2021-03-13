@@ -1,0 +1,141 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+<com.yashoid.sequencelayout.SequenceLayout
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    tools:context=".MainActivity"
+    app:sequences="@xml/sequences_main">
+
+    <TextView
+        android:id="@+id/title_address"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Your address:"
+        android:textColor="#666"/>
+
+    <TextView
+        android:id="@+id/address"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textIsSelectable="true"/>
+
+    <TextView
+        android:id="@+id/title_phonenumber"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Phone number:"
+        android:textColor="#666"/>
+
+    <TextView
+        android:id="@+id/phonenumber"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"/>
+
+    <Button
+        android:id="@+id/accountmanagement"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Account Management"
+        android:onClick="accountManagement"/>
+
+    <TextView
+        android:id="@+id/title_balance"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Balance"
+        android:textColor="#666"/>
+
+    <TextView
+        android:id="@+id/balance_gold"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"/>
+
+    <TextView
+        android:id="@+id/balance_cusd"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"/>
+
+    <TextView
+        android:id="@+id/balanceHack"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Copy your address and open https://celo.org/developers/faucet to increase your balance."
+        android:textSize="14sp"
+        android:textColor="#666"
+        android:linksClickable="true"
+        android:autoLink="web"/>
+
+    <Button
+        android:id="@+id/refreshbalance"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Refresh balance"
+        android:onClick="refreshBalance"/>
+
+    <TextView
+        android:id="@+id/title_query"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Get address of a phone number"
+        android:textColor="#666"/>
+
+    <EditText
+        android:id="@+id/edit_phonenumber"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:inputType="phone"
+        android:hint="+989121234567"/>
+
+    <Button
+        android:id="@+id/query"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Query"
+        android:onClick="query"/>
+
+    <EditText
+        android:id="@+id/queryresult"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:inputType="none"
+        android:editable="false"
+        android:hint="Query result"/>
+
+    <TextView
+        android:id="@+id/title_transfer"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Transfer cUSD"
+        android:textColor="#666"/>
+
+    <EditText
+        android:id="@+id/targetaddress"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:inputType="textNoSuggestions"
+        android:singleLine="true"
+        android:maxLines="1"
+        android:hint="0x123456789abcdef"/>
+
+    <EditText
+        android:id="@+id/amount"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:inputType="numberDecimal"
+        android:hint="1.23"/>
+
+    <Button
+        android:id="@+id/transfer"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Transfer"
+        android:onClick="transfer"/>
+
+</com.yashoid.sequencelayout.SequenceLayout>
+
+</ScrollView>

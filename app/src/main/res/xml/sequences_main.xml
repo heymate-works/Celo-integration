@@ -1,0 +1,163 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Sequences>
+
+    <Vertical>
+        <Span size="16dp"/>
+
+        <Span id="title_address" size="wrap"/>
+        <Span size="2dp"/>
+        <Span id="address" size="wrap"/>
+
+        <Span size="8dp"/>
+        <Span id="title_phonenumber" size="wrap"/>
+        <Span size="2dp"/>
+        <Span id="phonenumber" size="wrap"/>
+
+        <Span size="8dp"/>
+        <Span id="accountmanagement" size="wrap"/>
+
+        <Span size="48dp"/>
+
+        <Span id="title_balance" size="wrap"/>
+        <Span id="balance_spacer" size="2dp"/>
+        <Span size="100%balance_gold"/>
+
+        <Span size="8dp"/>
+        <Span id="balanceHack" size="wrap"/>
+        <Span size="2dp"/>
+        <Span id="refreshbalance" size="wrap"/>
+
+        <Span size="48dp"/>
+
+        <Span id="title_query" size="wrap"/>
+        <Span size="2dp"/>
+        <Span id="edit_phonenumber" size="wrap"/>
+        <Span size="2dp"/>
+        <Span id="query" size="wrap"/>
+        <Span size="2dp"/>
+        <Span id="queryresult" size="wrap"/>
+
+        <Span size="48dp"/>
+
+        <Span id="title_transfer" size="wrap"/>
+        <Span size="2dp"/>
+        <Span id="targetaddress" size="wrap"/>
+        <Span size="2dp"/>
+        <Span id="amount" size="wrap"/>
+        <Span size="2dp"/>
+        <Span id="transfer" size="wrap"/>
+
+        <Span size="16dp"/>
+
+    </Vertical>
+
+    <Vertical start="end@balance_spacer">
+        <Span id="balance_gold" size="wrap"/>
+    </Vertical>
+
+    <Vertical start="end@balance_spacer">
+        <Span id="balance_cusd" size="wrap"/>
+    </Vertical>
+
+    <Horizontal>
+        <Span size="16dp"/>
+        <Span id="title_address" size="wrap"/>
+    </Horizontal>
+
+    <Horizontal>
+        <Span size="16dp"/>
+        <Span id="address" size="wrap"/>
+    </Horizontal>
+
+    <Horizontal>
+        <Span size="16dp"/>
+        <Span id="title_phonenumber" size="wrap"/>
+    </Horizontal>
+
+    <Horizontal>
+        <Span size="16dp"/>
+        <Span id="phonenumber" size="wrap"/>
+    </Horizontal>
+
+    <Horizontal>
+        <Span size="16dp"/>
+        <Span id="accountmanagement" size="1w"/>
+        <Span size="16dp"/>
+    </Horizontal>
+
+    <Horizontal>
+        <Span size="1w"/>
+        <Span id="title_balance" size="wrap"/>
+        <Span size="1w"/>
+    </Horizontal>
+
+    <Horizontal>
+        <Span size="1w"/>
+        <Span id="balance_gold" size="wrap"/>
+        <Span size="25%"/>
+        <Span id="balance_cusd" size="wrap"/>
+        <Span size="1w"/>
+    </Horizontal>
+
+    <Horizontal>
+        <Span size="16dp"/>
+        <Span id="balanceHack" size="1w"/>
+        <Span size="16dp"/>
+    </Horizontal>
+
+    <Horizontal>
+        <Span size="1w"/>
+        <Span id="refreshbalance" size="100%accountmanagement"/>
+        <Span size="1w"/>
+    </Horizontal>
+
+    <Horizontal>
+        <Span size="1w"/>
+        <Span id="title_query" size="wrap"/>
+        <Span size="1w"/>
+    </Horizontal>
+
+    <Horizontal>
+        <Span size="16dp"/>
+        <Span id="edit_phonenumber" size="1w"/>
+        <Span size="16dp"/>
+    </Horizontal>
+
+    <Horizontal>
+        <Span size="1w"/>
+        <Span id="query" size="100%accountmanagement"/>
+        <Span size="1w"/>
+    </Horizontal>
+
+    <Horizontal>
+        <Span size="16dp"/>
+        <Span id="queryresult" size="1w"/>
+        <Span size="16dp"/>
+    </Horizontal>
+
+    <Horizontal>
+        <Span size="1w"/>
+        <Span id="title_transfer" size="wrap"/>
+        <Span size="1w"/>
+    </Horizontal>
+
+    <Horizontal>
+        <Span size="16dp"/>
+        <Span id="targetaddress" size="1w"/>
+        <Span size="16dp"/>
+    </Horizontal>
+
+    <Horizontal>
+        <Span size="16dp"/>
+        <Span id="amount" size="1w"/>
+        <Span size="16dp"/>
+    </Horizontal>
+
+    <Horizontal>
+        <Span size="1w"/>
+        <Span id="transfer" size="100%accountmanagement"/>
+        <Span size="1w"/>
+    </Horizontal>
+
+
+</Sequences>
