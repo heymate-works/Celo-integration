@@ -24,6 +24,8 @@ import org.web3j.tuples.generated.Tuple3;
 import org.web3j.tuples.generated.Tuple4;
 import org.web3j.utils.Numeric;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.math.BigDecimal;
@@ -31,6 +33,7 @@ import java.math.BigInteger;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
@@ -694,20 +697,18 @@ public class AttestationCarnage {
 
     // https://github.com/celo-org/celo-monorepo/blob/218f32526b45d77bd23d1375907b791cfdf0f619/packages/sdk/utils/src/signatureUtils.ts#L102
     private static boolean verifySignature(byte[] message, String signature, String signer) {
-        Log.w("CeloThing", "verifySignature: " + signature);
-
         signature = signature.substring(2);
 
         byte[] messageHash = hashMessageWithPrefix(message);
 
-        BigInteger r;
-        BigInteger s;
-        int v;
+        byte[] r;
+        byte[] s;
+        byte v;
 
         try {
-            r = new BigInteger(signature.substring(0, 64), 16);
-            s = new BigInteger(signature.substring(64, 128), 16);
-            v = Integer.parseInt(signature.substring(128, 130), 16);
+            r = Numeric.hexStringToByteArray(signature.substring(0, 64));
+            s = Numeric.hexStringToByteArray(signature.substring(64, 128));
+            v = Byte.parseByte(signature.substring(128, 130), 16);
             if (v < 27) {
                 v += 27;
             }
@@ -720,9 +721,9 @@ public class AttestationCarnage {
         }
 
         try {
-            v = Integer.parseInt(signature.substring(0, 2), 16);
-            r = new BigInteger(signature.substring(2, 66), 16);
-            s = new BigInteger(signature.substring(66, 130), 16);
+            v = Byte.parseByte(signature.substring(0, 2), 16);
+            r = Numeric.hexStringToByteArray(signature.substring(2, 66));
+            s = Numeric.hexStringToByteArray(signature.substring(66, 130));
             if (v < 27) {
                 v += 27;
             }
@@ -738,16 +739,15 @@ public class AttestationCarnage {
         return false;
     }
 
-    private static boolean isValidSignature(String signer, byte[] message, int v, BigInteger r, BigInteger s) {
+    private static boolean isValidSignature(String signer, byte[] message, byte v, byte[] r, byte[] s) {
         try {
-            ECDSASignature signature = new ECDSASignature(r, s);
-            BigInteger publicKey = Sign.recoverFromSignature(v, signature, message);
+            Sign.SignatureData signatureData = new Sign.SignatureData(v, r, s);
+
+            BigInteger publicKey = Sign.signedMessageHashToKey(message, signatureData);
 
             String retrievedAddress = Keys.getAddress(publicKey);
 
-            if (Numeric.containsHexPrefix(signer)) {
-                signer = Numeric.cleanHexPrefix(signer);
-            }
+            signer = Numeric.cleanHexPrefix(signer);
 
             return retrievedAddress.equals(signer);
         } catch (Throwable t) {
@@ -915,6 +915,19 @@ public class AttestationCarnage {
         return strings;
     }
 
+    private static ByteArrayInputStream save(InputStream inputStream) throws IOException {
+        // TODO REMOVE
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+        while (inputStream.available() != -1) {
+            output.write(inputStream.read());
+        }
+
+        byte[] data = output.toByteArray();
+
+        return new ByteArrayInputStream(data);
+    }
+
     private static String streamToString(InputStream inputStream) throws IOException {
         StringBuilder sb = new StringBuilder();
 
@@ -937,6 +950,10 @@ public class AttestationCarnage {
                 }
 
                 sb.append(new String(buffer, 0, read, "UTF-8"));
+
+                if (offset == 1) {
+                    buffer[0] = buffer[read];
+                }
             }
             else {
                 offset += size;
@@ -989,7 +1006,7 @@ public class AttestationCarnage {
         byte[] bytes = a.getBytes();
         Keccak.Digest256 digest256 = new Keccak.Digest256();
         bytes = digest256.digest(bytes);
-        return new BigInteger(bytes).toString(16);
+        return Numeric.toHexString(bytes, 0, bytes.length, false);
     }
 
 }
