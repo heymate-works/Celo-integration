@@ -1,4 +1,4 @@
-package works.heymate.celoexploration;
+package works.heymate.celo;
 
 public class SelectiveCall {
 

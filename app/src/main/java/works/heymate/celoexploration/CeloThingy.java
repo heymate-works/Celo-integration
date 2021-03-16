@@ -32,6 +32,7 @@ import java.util.Set;
 
 import io.github.novacrypto.bip39.MnemonicGenerator;
 import io.github.novacrypto.bip39.wordlists.English;
+import works.heymate.celo.ODISSaltUtil;
 
 public class CeloThingy extends Handler {
 
@@ -287,15 +288,15 @@ public class CeloThingy extends Handler {
         final AttestationMessageHolder messageHolder = new AttestationMessageHolder();
 
         post(() -> {
-            int result = AttestationCarnage.requestAttestations(mContractKit, phoneNumber, message -> {
-                runOnMainThread(() -> {
-                    Log.i(TAG, "Attestation Progress: " + message);
-                    callback.progressUpdate(message);
-                });
-            });
-            runOnMainThread(() -> {
-                callback.onAttestationRequestResult(result != AttestationCarnage.RESULT_NETWORK_ERROR, result == AttestationCarnage.RESULT_SUCCESS, "Hellllooooooo");
-            });
+//            int result = AttestationCarnage.requestAttestations(mContractKit, phoneNumber, message -> {
+//                runOnMainThread(() -> {
+//                    Log.i(TAG, "Attestation Progress: " + message);
+//                    callback.progressUpdate(message);
+//                });
+//            });
+//            runOnMainThread(() -> {
+//                callback.onAttestationRequestResult(result != AttestationCarnage.RESULT_NETWORK_ERROR, result == AttestationCarnage.RESULT_SUCCESS, "Hellllooooooo");
+//            });
         });
 
         /*
@@ -417,11 +418,6 @@ public class CeloThingy extends Handler {
 
                 mRefreshing = false;
                 notifyObservers();
-                try {
-                    TheSaltyPepper.getSaltForPepper(mContractKit, "+989124152410");
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
                 return;
             case LOAD_PHONE_NUMBER:
                 if (mLoadingPhoneNumber || mContractKit == null || mAddress == null || mPhoneNumber != null) {

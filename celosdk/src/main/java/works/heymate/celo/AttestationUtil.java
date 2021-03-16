@@ -1,9 +1,8 @@
-package works.heymate.celoexploration;
+package works.heymate.celo;
 
 import android.util.Log;
 
 import org.bouncycastle.jcajce.provider.digest.Keccak;
-import org.bouncycastle.util.test.FixedSecureRandom;
 import org.celo.contractkit.ContractKit;
 import org.celo.contractkit.Utils;
 import org.celo.contractkit.wrapper.AccountsWrapper;
@@ -13,12 +12,9 @@ import org.celo.contractkit.wrapper.StableTokenWrapper;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
-import org.web3j.crypto.Credentials;
-import org.web3j.crypto.ECDSASignature;
 import org.web3j.crypto.Hash;
 import org.web3j.crypto.Keys;
 import org.web3j.crypto.Sign;
-import org.web3j.protocol.core.DefaultBlockParameter;
 import org.web3j.tuples.generated.Tuple2;
 import org.web3j.tuples.generated.Tuple3;
 import org.web3j.tuples.generated.Tuple4;
@@ -28,16 +24,12 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashSet;
-import java.util.LinkedList;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
 /**
@@ -45,7 +37,7 @@ import java.util.Set;
  * requestAttestations() to trigger the sending of SMSs.
  *
  */
-public class AttestationCarnage {
+class AttestationUtil {
 
     private static final String TAG = "Attestation";
 
@@ -73,6 +65,10 @@ public class AttestationCarnage {
 
     // https://github.com/celo-org/celo-monorepo/blob/218f32526b45d77bd23d1375907b791cfdf0f619/packages/sdk/base/src/io.ts#L2
     private static final String URL_REGEX = "((([A-Za-z]{3,9}:(?:\\/\\/)?)(?:[\\-;:&=\\+\\$,\\w]+@)?[A-Za-z0-9\\.\\-]+|(?:www\\.|[\\-;:&=\\+\\$,\\w]+@)[A-Za-z0-9\\.\\-]+)((?:\\/[\\+~%\\/\\.\\w\\-_]*)?\\??(?:[\\-\\+=&;%@\\.\\w_]*)#?(?:[\\.\\!\\/\\\\\\w]*))?)";
+
+    interface AttestationProgressReporter {
+        void report(String message);
+    }
 
     // https://github.com/celo-org/celo-monorepo/blob/master/packages/env-tests/src/shared/attestation.ts#L169
     public static void completeAttestation() {
@@ -246,7 +242,7 @@ public class AttestationCarnage {
                         stream = connection.getErrorStream();
                     }
 
-                    possibleErrors.add(new PossibleError(responseCode, streamToString(stream), attestation.issuer, attestation.name));
+                    possibleErrors.add(new PossibleError(responseCode, InternalUtils.streamToString(stream), attestation.issuer, attestation.name));
                 }
 
                 report("Success. Attestation requested from issuer: " + url);
@@ -562,7 +558,7 @@ public class AttestationCarnage {
                 throw new Exception("Request failed with status " + responseCode);
             }
 
-            JSONObject json = new JSONObject(streamToString(connection.getInputStream()));
+            JSONObject json = new JSONObject(InternalUtils.streamToString(connection.getInputStream()));
 
             String status = json.getString("status");
             String version = json.getString("version");
@@ -622,7 +618,7 @@ public class AttestationCarnage {
                     throw new Exception("Request failed with status " + responseCode);
                 }
 
-                String rawData = streamToString(connection.getInputStream());
+                String rawData = InternalUtils.streamToString(connection.getInputStream());
 
                 connection.disconnect();
 
@@ -973,45 +969,6 @@ public class AttestationCarnage {
         Keccak.Digest256 digest256 = new Keccak.Digest256();
         bytes = digest256.digest(bytes);
         return Numeric.toHexString(bytes, 0, bytes.length, false);
-    }
-
-    public static String streamToString(InputStream inputStream) throws IOException {
-        StringBuilder sb = new StringBuilder();
-
-        byte[] buffer = new byte[512];
-        int offset = 0;
-        int size = 0;
-
-        while (size != -1) {
-            size = inputStream.read(buffer, offset, buffer.length - offset);
-
-            if (offset + size > 1) {
-                int read = offset + size;
-
-                if (read % 2 != 0) {
-                    read--;
-                    offset = 1;
-                }
-                else {
-                    offset = 0;
-                }
-
-                sb.append(new String(buffer, 0, read, "UTF-8"));
-
-                if (offset == 1) {
-                    buffer[0] = buffer[read];
-                }
-            }
-            else if (size != -1) {
-                offset += size;
-            }
-        }
-
-        if (offset > 0) {
-            sb.append((char) buffer[0]);
-        }
-
-        return sb.toString();
     }
 
 }
