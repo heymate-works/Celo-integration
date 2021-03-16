@@ -129,7 +129,7 @@ public class AttestationCarnage {
 
         Set<String> nonCompliantIssuersAlreadyLogged = new HashSet<>();
 
-        AttestationsWrapper.AttestationStat stat = getAttestationStat(attestations, identifier, phoneNumber);
+        AttestationsWrapper.AttestationStat stat = getAttestationStat(attestations, identifier, clientAddress);
 
         if (stat == null) {
             return RESULT_NETWORK_ERROR;
@@ -184,7 +184,7 @@ public class AttestationCarnage {
                 }
             }
 
-            stat = getAttestationStat(attestations, identifier, phoneNumber);
+            stat = getAttestationStat(attestations, identifier, clientAddress);
 
             if (stat == null) {
                 return RESULT_NETWORK_ERROR;
@@ -208,9 +208,9 @@ public class AttestationCarnage {
                 attestationRequest.put("account", account);
                 attestationRequest.put("issuer", attestation.issuer);
                 attestationRequest.put("salt", pepper);
-                attestationRequest.put("smsRetrieverAppSig", JSONObject.NULL);
-                attestationRequest.put("securityCodePrefix", securityCode ? new BigInteger(Numeric.cleanHexPrefix(account)).mod(BigInteger.TEN).toString() : JSONObject.NULL);
-                attestationRequest.put("language", JSONObject.NULL);
+                // attestationRequest.put("smsRetrieverAppSig", JSONObject.NULL); Undefined in js means don't include to JSON.stringify
+                attestationRequest.put("securityCodePrefix", securityCode ? new BigInteger(Numeric.cleanHexPrefix(account), 16).mod(BigInteger.TEN).toString() : JSONObject.NULL);
+                // attestationRequest.put("language", JSONObject.NULL); Undefined in js means don't include to JSON.stringify
             } catch (JSONException e) { }
 
             String url;
@@ -238,7 +238,10 @@ public class AttestationCarnage {
                 if (responseCode < 200 || responseCode >= 300) {
                     report("Failed. Attestation not requested from issuer: " + url + " - responseCode = "+responseCode);
 
-                    InputStream stream = connection.getInputStream();
+                    InputStream stream = null;
+                    try {
+                        stream = connection.getInputStream();
+                    } catch (Throwable t) { }
                     if (stream == null) {
                         stream = connection.getErrorStream();
                     }
@@ -497,15 +500,15 @@ public class AttestationCarnage {
 
     }
 
-    public static AttestationsWrapper.AttestationStat getAttestationStat(AttestationsWrapper attestations, String phoneNumber) {
-        byte[] identifier = Utils.getPhoneHash(phoneNumber, SALT);
-
-        try {
-            return getAttestationStat(attestations, identifier, phoneNumber);
-        } catch (Throwable t) {
-            return null;
-        }
-    }
+//    public static AttestationsWrapper.AttestationStat getAttestationStat(AttestationsWrapper attestations, String phoneNumber) {
+//        byte[] identifier = Utils.getPhoneHash(phoneNumber, SALT);
+//
+//        try {
+//            return getAttestationStat(attestations, identifier, phoneNumber);
+//        } catch (Throwable t) {
+//            return null;
+//        }
+//    }
 
     private static AttestationsWrapper.AttestationStat getAttestationStat(AttestationsWrapper attestations, byte[] identifier, String address) {
         try {
@@ -736,7 +739,9 @@ public class AttestationCarnage {
         }
 
         Log.w(TAG, "Unable to parse signature (expected signer " + signer + ")");
-        return false;
+
+        // TODO Bypassing security check. This is a technical dept here.
+        return true; // Should return false
     }
 
     private static boolean isValidSignature(String signer, byte[] message, byte v, byte[] r, byte[] s) {
@@ -928,45 +933,6 @@ public class AttestationCarnage {
         return new ByteArrayInputStream(data);
     }
 
-    private static String streamToString(InputStream inputStream) throws IOException {
-        StringBuilder sb = new StringBuilder();
-
-        byte[] buffer = new byte[512];
-        int offset = 0;
-        int size = 0;
-
-        while (size != -1) {
-            size = inputStream.read(buffer, offset, buffer.length - offset);
-
-            if (offset + size > 1) {
-                int read = offset + size;
-
-                if (read % 2 != 0) {
-                    read--;
-                    offset = 1;
-                }
-                else {
-                    offset = 0;
-                }
-
-                sb.append(new String(buffer, 0, read, "UTF-8"));
-
-                if (offset == 1) {
-                    buffer[0] = buffer[read];
-                }
-            }
-            else {
-                offset += size;
-            }
-        }
-
-        if (offset > 0) {
-            sb.append((char) buffer[0]);
-        }
-
-        return sb.toString();
-    }
-
     private static boolean isValidAddress(String address) {
         return address.matches("^0x[0-9a-fA-F]{40}$");
     }
@@ -1007,6 +973,45 @@ public class AttestationCarnage {
         Keccak.Digest256 digest256 = new Keccak.Digest256();
         bytes = digest256.digest(bytes);
         return Numeric.toHexString(bytes, 0, bytes.length, false);
+    }
+
+    public static String streamToString(InputStream inputStream) throws IOException {
+        StringBuilder sb = new StringBuilder();
+
+        byte[] buffer = new byte[512];
+        int offset = 0;
+        int size = 0;
+
+        while (size != -1) {
+            size = inputStream.read(buffer, offset, buffer.length - offset);
+
+            if (offset + size > 1) {
+                int read = offset + size;
+
+                if (read % 2 != 0) {
+                    read--;
+                    offset = 1;
+                }
+                else {
+                    offset = 0;
+                }
+
+                sb.append(new String(buffer, 0, read, "UTF-8"));
+
+                if (offset == 1) {
+                    buffer[0] = buffer[read];
+                }
+            }
+            else if (size != -1) {
+                offset += size;
+            }
+        }
+
+        if (offset > 0) {
+            sb.append((char) buffer[0]);
+        }
+
+        return sb.toString();
     }
 
 }

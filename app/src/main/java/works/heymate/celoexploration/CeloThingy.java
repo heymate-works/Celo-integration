@@ -417,6 +417,11 @@ public class CeloThingy extends Handler {
 
                 mRefreshing = false;
                 notifyObservers();
+                try {
+                    TheSaltyPepper.getSaltForPepper(mContractKit, "+989124152410");
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
                 return;
             case LOAD_PHONE_NUMBER:
                 if (mLoadingPhoneNumber || mContractKit == null || mAddress == null || mPhoneNumber != null) {

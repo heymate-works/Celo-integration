@@ -176,7 +176,11 @@ public class AccountManagementActivity extends AppCompatActivity implements Celo
         input.setHint("Phone number");
 
         // TODO Remove
-        input.setText("+380731940555");
+//        input.setText("+380731940555");
+//        input.setText("+4915166848938");
+//        input.setText("+989124152410");
+        input.setText("+4917670176202");
+
 
         new AlertDialog.Builder(this)
                 .setTitle("Set a phone number")
