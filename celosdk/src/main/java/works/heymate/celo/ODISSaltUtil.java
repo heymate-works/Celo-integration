@@ -1,5 +1,7 @@
 package works.heymate.celo;
 
+import android.content.Context;
+import android.content.SharedPreferences;
 import android.util.Base64;
 
 import org.celo.BlindThresholdBlsModule;
@@ -14,6 +16,8 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 
 public class ODISSaltUtil {
+
+    private static final String TAG = "ODISSalt";
 
     private static final String SIGN_MESSAGE_ENDPOINT = "/getBlindedMessageSig";
 
@@ -32,7 +36,13 @@ public class ODISSaltUtil {
     private static final int PEPPER_CHAR_LENGTH = 13;
 
     // https://github.com/celo-org/celo-monorepo/blob/79d0efaf50e99ff66984269d5675e4abb0e6b46f/packages/sdk/identity/src/odis/phone-number-identifier.ts#L36
-    public static String getSalt(ContractKit contractKit, String odisUrl, String odisPubKey, String target) throws CeloException {
+    public static String getSalt(Context context, ContractKit contractKit, String odisUrl, String odisPubKey, String target) throws CeloException {
+        SharedPreferences sharedPreferences = context.getSharedPreferences(TAG, Context.MODE_PRIVATE);
+
+        if (sharedPreferences.contains(target)) {
+            return sharedPreferences.getString(target, null);
+        }
+
         String address = contractKit.getAddress();
 
         BlindThresholdBlsModule blsBlindingClient = new BlindThresholdBlsModule();
@@ -123,7 +133,11 @@ public class ODISSaltUtil {
             String base64UnblindedSig = blsBlindingClient.unblindMessage(base64BlindSig, odisPubKey);
             byte[] sigBuf = Base64.decode(base64UnblindedSig, Base64.DEFAULT);
 
-            return Base64.encodeToString(Hash.sha256(sigBuf), Base64.DEFAULT).substring(0, PEPPER_CHAR_LENGTH);
+            String salt = Base64.encodeToString(Hash.sha256(sigBuf), Base64.DEFAULT).substring(0, PEPPER_CHAR_LENGTH);
+
+            sharedPreferences.edit().putString(target, salt).apply();
+
+            return salt;
         } catch (Exception e) {
             throw new CeloException(CeloError.UNBLINDING_ERROR, e);
         }

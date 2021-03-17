@@ -15,6 +15,7 @@ import org.json.JSONObject;
 import org.web3j.crypto.Hash;
 import org.web3j.crypto.Keys;
 import org.web3j.crypto.Sign;
+import org.web3j.protocol.exceptions.TransactionException;
 import org.web3j.tuples.generated.Tuple2;
 import org.web3j.tuples.generated.Tuple3;
 import org.web3j.tuples.generated.Tuple4;
@@ -48,11 +49,33 @@ class AttestationUtil {
     public static final int RESULT_INCONSISTENT_STATE = 4; // Unknown issue. Try again?
     public static final int RESULT_TIME_OUT_WHILE_WAITING_FOR_SELECTING_ISSUERS = 5; // Try again later
 
-    // How many attestations should be requested at maximum
-    public static final int MAX_ATTESTATIONS = 3;
+    static class AttestationResult {
 
-    // The salt to use instead of getting a pepper from ODIS
-    private static final String SALT = "IAmSalty";
+        boolean countsAreReliable = false;
+        int newAttestations = 0;
+        int totalAttestations = 0;
+        int completedAttestations = 0;
+        CeloException errorCause = null;
+
+        AttestationResult() {
+
+        }
+
+        AttestationResult(AttestationsWrapper.AttestationStat attestationStat) {
+            countsAreReliable = true;
+            totalAttestations = attestationStat.total;
+            completedAttestations = attestationStat.completed;
+        }
+
+    }
+
+    // How many attestations should be requested at maximum
+    private static final int MAX_ATTESTATIONS = 3;
+
+    private static final int NUM_ATTESTATIONS_REQUIRED = 3;
+    private static final int MAX_ACTIONABLE_ATTESTATIONS = 5;
+
+    private static final double DEFAULT_ATTESTATION_THRESHOLD = 0.25d;
 
     private static final String CLAIM_TYPE_ATTESTATION_SERVICE_URL = "ATTESTATION_SERVICE_URL";
     private static final String CLAIM_TYPE_ACCOUNT = "ACCOUNT";
@@ -65,6 +88,320 @@ class AttestationUtil {
 
     // https://github.com/celo-org/celo-monorepo/blob/218f32526b45d77bd23d1375907b791cfdf0f619/packages/sdk/base/src/io.ts#L2
     private static final String URL_REGEX = "((([A-Za-z]{3,9}:(?:\\/\\/)?)(?:[\\-;:&=\\+\\$,\\w]+@)?[A-Za-z0-9\\.\\-]+|(?:www\\.|[\\-;:&=\\+\\$,\\w]+@)[A-Za-z0-9\\.\\-]+)((?:\\/[\\+~%\\/\\.\\w\\-_]*)?\\??(?:[\\-\\+=&;%@\\.\\w_]*)#?(?:[\\.\\!\\/\\\\\\w]*))?)";
+
+    // Celo wallet app: verification.ts: restartableVerification
+    public static AttestationResult requestAttestations(ContractKit contractKit, String phoneNumber, String salt) {
+        AttestationResult result = new AttestationResult();
+
+        final boolean initialWithoutRevealing = true;
+
+        boolean isRestarted = false;
+
+        while (true) {
+            boolean withoutRevealing = !isRestarted && initialWithoutRevealing;
+
+            AttestationsWrapper.AttestationStat attestationStat;
+            List<ActionableAttestation> actionableAttestations;
+
+            try {
+                Tuple2<AttestationsWrapper.AttestationStat, List<ActionableAttestation>> verificationState =
+                        fetchVerificationState(contractKit, phoneNumber, salt);
+
+                attestationStat = verificationState.component1();
+                actionableAttestations = verificationState.component2();
+            } catch (CeloException e) {
+                result.errorCause = new CeloException(CeloError.ATTESTATION_VERIFICATION_STATUS, e);
+                return result;
+            }
+
+            result.countsAreReliable = true;
+            result.totalAttestations = attestationStat.total;
+            result.completedAttestations = attestationStat.completed;
+
+            Tuple2<AttestationResult, Boolean> callResult = doVerificationFlow(contractKit, attestationStat, phoneNumber, salt, actionableAttestations, withoutRevealing);
+
+            AttestationResult verification = callResult.component1();
+            boolean restart = callResult.component2();
+
+            if (restart) {
+                isRestarted = true;
+                continue;
+            }
+
+            return verification;
+        }
+    }
+
+    private static Tuple2<AttestationResult, Boolean> doVerificationFlow(
+            ContractKit contractKit,
+            AttestationsWrapper.AttestationStat status,
+            String phoneNumber,
+            String salt,
+            List<ActionableAttestation> attestations,
+            boolean withoutRevealing
+    ) {
+        AttestationResult result = new AttestationResult(status);
+
+        byte[] phoneHash = Utils.getPhoneHash(phoneNumber, salt);
+
+        if (!AttestationsWrapper.isAccountConsideredVerified(status, NUM_ATTESTATIONS_REQUIRED, DEFAULT_ATTESTATION_THRESHOLD).isVerified) {
+            if (status.completed > 0) {
+                try {
+                    List<String> associatedAccounts = contractKit.contracts.getAttestations().lookupAccountsForIdentifier(phoneHash).send();
+
+                    if (associatedAccounts == null || !associatedAccounts.contains(contractKit.getAddress())) {
+                        throw new CeloException(CeloError.CANT_VERIFY_REVOKED_ACCOUNT, null);
+                    }
+                } catch (Exception e) {
+                    result.errorCause = new CeloException(CeloError.NETWORK_ERROR, e);
+                    return new Tuple2<>(result, true);
+                }
+            }
+
+            if (!withoutRevealing) {
+                int revealedAttestations = revealAttestations(contractKit, attestations, phoneNumber, salt);
+
+                int attestationsToRequest = Math.max(0, NUM_ATTESTATIONS_REQUIRED - status.completed - revealedAttestations);
+
+                if (attestationsToRequest + attestations.size() > MAX_ACTIONABLE_ATTESTATIONS) {
+                    result.errorCause = new CeloException(CeloError.MAX_ACTIONABLE_ATTESTATIONS_EXCEEDED, null);
+                    return new Tuple2<>(result, false);
+                }
+
+                if (attestationsToRequest > 0) {
+                    int attestationsBefore = attestations.size();
+
+                    try {
+                        attestations = requestAndRetrieveAttestations(contractKit, phoneHash, attestations, attestations.size() + attestationsToRequest);
+                    } catch (CeloException e) {
+                        result.countsAreReliable = false;
+                        result.errorCause = e;
+
+                        try {
+                            AttestationsWrapper.AttestationStat attestationStat = contractKit.contracts.getAttestations().getAttestationStat(phoneHash, contractKit.getAddress());
+
+                            result.completedAttestations = attestationStat.completed;
+                            result.totalAttestations = attestationStat.total;
+                        } catch (Throwable t) { }
+
+                        return new Tuple2<>(result, true);
+                    }
+
+                    int attestationsAfter = attestations.size();
+
+                    result.newAttestations += attestationsAfter - attestationsBefore;
+
+                    revealAttestations(contractKit, attestations, phoneNumber, salt);
+                }
+            }
+        }
+        return null;
+    }
+
+    private static List<ActionableAttestation> requestAndRetrieveAttestations(
+            ContractKit contractKit,
+            byte[] phoneHash,
+            List<ActionableAttestation> attestations,
+            int attestationsNeeded) throws CeloException {
+        while (attestations.size() < attestationsNeeded) {
+            requestAttestations(contractKit, attestationsNeeded - attestations.size(), phoneHash);
+
+            attestations = getActionableAttestationsAndNonCompliantIssuers(contractKit, phoneHash).component1();
+        }
+
+        return attestations;
+    }
+
+    private static void requestAttestations(ContractKit contractKit, int numAttestationsRequestsNeeded, byte[] phoneHash) throws CeloException {
+        if (numAttestationsRequestsNeeded <= 0) {
+            return;
+        }
+
+        UnselectedRequest unselectedRequest = getUnselectedRequest(contractKit, phoneHash);
+
+        boolean isUnselectedRequestValid = !unselectedRequest.blockNumber.equals(BigInteger.ZERO);
+
+        if (isUnselectedRequestValid) {
+            try {
+                isUnselectedRequestValid = !isAttestationExpired(contractKit, unselectedRequest.blockNumber);
+            } catch (Throwable t) {
+                throw new CeloException(CeloError.NETWORK_ERROR, t);
+            }
+        }
+
+        if (!isUnselectedRequestValid) {
+            BigInteger bigNumAttestationsRequestsNeeded = BigInteger.valueOf(numAttestationsRequestsNeeded);
+
+            try {
+                approveAttestationFee(contractKit, bigNumAttestationsRequestsNeeded);
+
+                contractKit.contracts.getAttestations().getContract().request(phoneHash, bigNumAttestationsRequestsNeeded, contractKit.contracts.getStableToken().getContractAddress()).send();
+            } catch (Throwable t) {
+                throw new CeloException((t instanceof TransactionException) ? CeloError.INSUFFICIENT_BALANCE : CeloError.NETWORK_ERROR, t);
+            }
+        }
+
+        waitForSelectingIssuers(contractKit, phoneHash);
+
+        try {
+            contractKit.contracts.getAttestations().selectIssuers(phoneHash).send();
+        } catch (Throwable t) {
+            throw new CeloException(CeloError.NETWORK_ERROR, t);
+        }
+    }
+
+    private static void waitForSelectingIssuers(ContractKit contractKit, byte[] identifier) throws CeloException {
+        final int timeoutSeconds = 120;
+        final int pollDurationSeconds = 1;
+
+        AttestationsWrapper attestations = contractKit.contracts.getAttestations();
+
+        long startTime = System.currentTimeMillis();
+
+        UnselectedRequest unselectedRequest = getUnselectedRequest(contractKit, identifier);
+
+        BigInteger waitBlocks;
+        try {
+            waitBlocks = attestations.selectIssuersWaitBlocks().send();
+        } catch (Throwable t) {
+            throw new CeloException(CeloError.NETWORK_ERROR, t);
+        }
+
+        if (unselectedRequest.blockNumber.equals(BigInteger.ZERO)) {
+            Log.e(TAG, "No unselectedRequest to wait for while attempting to select issuers.");
+            return;
+        }
+
+        while (System.currentTimeMillis() - startTime < timeoutSeconds * 1000) {
+            try {
+                BigInteger blockNumber = getBlockNumber(contractKit);
+
+                if (blockNumber.compareTo(unselectedRequest.blockNumber.add(waitBlocks)) >= 0) {
+                    return;
+                }
+
+                try {
+                    Thread.sleep(pollDurationSeconds * 1000);
+                } catch (InterruptedException e) {
+                    break;
+                }
+            } catch (Throwable t) {
+                Log.e(TAG, "Failed to get block number. Ignored.", t);
+            }
+        }
+
+        throw new CeloException(CeloError.ATTESTATION_SLOW_BLOCKS, null);
+    }
+
+    private static UnselectedRequest getUnselectedRequest(ContractKit contractKit, byte[] phoneNumber) throws CeloException {
+        try {
+            return new UnselectedRequest(contractKit.contracts.getAttestations().getUnselectedRequest(phoneNumber, contractKit.getAddress()).send());
+        } catch (Throwable t) {
+            throw new CeloException(CeloError.NETWORK_ERROR, t);
+        }
+    }
+
+    private static int revealAttestations(ContractKit contractKit, List<ActionableAttestation> attestations, String phoneNumber, String salt) {
+        final boolean isFeelessVerification = false;
+
+        List<PossibleError> possibleErrors = requestAttestationFromIssuers(attestations, phoneNumber, contractKit.getAddress(), salt, isFeelessVerification);
+
+        return attestations.size() - possibleErrors.size();
+    }
+
+    private static Tuple2<AttestationsWrapper.AttestationStat, List<ActionableAttestation>> fetchVerificationState(ContractKit contractKit, String phoneNumber, String salt) throws CeloException {
+        byte[] identifier = Utils.getPhoneHash(phoneNumber, salt);
+
+        AttestationsWrapper.AttestationStat attestationStat;
+
+        try {
+            attestationStat = contractKit.contracts.getAttestations().getAttestationStat(identifier, contractKit.getAddress());
+        } catch (Exception e) {
+            throw new CeloException(CeloError.ATTESTATION_STATUS, e);
+        }
+
+        List<ActionableAttestation> actionableAttestations;
+
+        try {
+            actionableAttestations = getActionableAttestationsAndNonCompliantIssuers(contractKit, identifier).component1();
+        } catch (CeloException e) {
+            throw new CeloException(CeloError.ATTESTATION_ACTIONABLES, e);
+        }
+
+        return new Tuple2<>(attestationStat, actionableAttestations);
+    }
+
+
+    private static Tuple2<List<ActionableAttestation>, List<String>> getActionableAttestationsAndNonCompliantIssuers(ContractKit contractKit, byte[] identifier) throws CeloException {
+        ActionableAttestation[] lookupResults = lookupAttestationServiceUrls(contractKit, identifier);
+
+        List<ActionableAttestation> actionableAttestations = new ArrayList<>(lookupResults.length);
+        List<String> nonCompliantIssuers = new ArrayList<>(lookupResults.length);
+
+        for (ActionableAttestation lookupResult: lookupResults) {
+            if (lookupResult.isValid) {
+                actionableAttestations.add(lookupResult);
+            }
+            else {
+                nonCompliantIssuers.add(lookupResult.issuer);
+            }
+        }
+
+        return new Tuple2<>(actionableAttestations, nonCompliantIssuers);
+    }
+
+    // https://github.com/celo-org/celo-monorepo/blob/218f32526b45d77bd23d1375907b791cfdf0f619/packages/sdk/contractkit/src/wrappers/Attestations.ts#L273
+    private static ActionableAttestation[] lookupAttestationServiceUrls(ContractKit contractKit, byte[] identifier) throws CeloException {
+        final int tries = 3;
+
+        AttestationsWrapper attestations = contractKit.contracts.getAttestations();
+
+        // blockNumbers, issuers, whereToBreakTheString, metadataURLs
+        Tuple4<List<BigInteger>, List<String>, List<BigInteger>, byte[]> rawCompletableAttestations;
+
+        try {
+            rawCompletableAttestations = attestations.getContract().getCompletableAttestations(identifier, contractKit.getAddress()).send();
+        } catch (Exception e) {
+            throw new CeloException(CeloError.NETWORK_ERROR, e);
+        }
+
+        String[] metadataURLs = parseSolidityStringArray(rawCompletableAttestations.component3(), rawCompletableAttestations.component4());
+
+        ActionableAttestation[] lookupResults = new ActionableAttestation[metadataURLs.length];
+
+        for (int i = 0; i < lookupResults.length; i++) {
+            lookupResults[i] = lookupAttestationServiceURL(
+                    contractKit,
+                    rawCompletableAttestations.component1().get(i),
+                    rawCompletableAttestations.component2().get(i),
+                    metadataURLs[i]);
+        }
+
+        return lookupResults;
+    }
+
+
+    /**
+     *
+     *
+     *
+     *
+     *
+     *
+     *
+     *
+     *
+     *
+     *
+     *
+     *
+     *
+     *
+     *
+     *
+     *
+     *
+     */
 
     interface AttestationProgressReporter {
         void report(String message);
@@ -84,15 +421,15 @@ class AttestationUtil {
     }
 
     // https://github.com/celo-org/celo-monorepo/blob/master/packages/celotool/src/cmds/bots/auto-verify.ts#L83
-    public static int requestAttestations(ContractKit contractKit, String phoneNumber, AttestationProgressReporter reporter) {
+    public static int requestAttestations(ContractKit contractKit, String phoneNumber, String salt, AttestationProgressReporter reporter) {
         sReporter = reporter;
 
         report("Verifying with security code");
-        int result = verify(contractKit, phoneNumber, true);
+        int result = verify(contractKit, phoneNumber, salt, true);
 
         if (result != RESULT_SUCCESS) {
             report("Verify with security failed (" + result + "). Trying without it.");
-            return verify(contractKit, phoneNumber, false);
+            return verify(contractKit, phoneNumber, salt, false);
         }
 
         report("Verify final result is: " + result);
@@ -100,28 +437,16 @@ class AttestationUtil {
         return result;
     }
 
-    private static int verify(ContractKit contractKit, String phoneNumber, boolean useSecurityCode) {
+    public static int verify(ContractKit contractKit, String phoneNumber, String salt, boolean useSecurityCode) {
         // It is good for the future
         // contractKit.contracts.getAttestations().getContract().numberValidatorsInCurrentSet()
-
         String clientAddress = contractKit.getAddress();
-
-        if (clientAddress == null) {
-            return RESULT_NO_ADDRESS;
-        }
 
         AttestationsWrapper attestations = contractKit.contracts.getAttestations();
         StableTokenWrapper stableToken = contractKit.contracts.getStableToken();
         GasPriceMinimumWrapper gasPriceMinimum = contractKit.contracts.getGasPriceMinimum();
 
-        byte[] identifier;
-
-        try {
-            identifier = Utils.getPhoneHash(phoneNumber, SALT);
-        } catch (Throwable t) {
-            Log.e(TAG, "Invalid phone number.", t);
-            return RESULT_BAD_PHONE_NUMBER;
-        }
+        byte[] identifier = Utils.getPhoneHash(phoneNumber, salt);
 
         Set<String> nonCompliantIssuersAlreadyLogged = new HashSet<>();
 
@@ -153,10 +478,10 @@ class AttestationUtil {
             }
 
             report("Getting actionable attestations and non compliant issuers");
-            List<AttestationServiceURLLookupResult> attestationsToComplete;
+            List<ActionableAttestation> attestationsToComplete;
             List<String> nonCompliantIssuers;
             try {
-                Tuple2<List<AttestationServiceURLLookupResult>, List<String>> result = getActionableAttestationsAndNonCompliantIssuers(contractKit, identifier, clientAddress);
+                Tuple2<List<ActionableAttestation>, List<String>> result = getActionableAttestationsAndNonCompliantIssuers(contractKit, identifier, clientAddress);
 
                 attestationsToComplete = result.component1();
                 nonCompliantIssuers = result.component2();
@@ -169,7 +494,7 @@ class AttestationUtil {
             nonCompliantIssuersAlreadyLogged.addAll(nonCompliantIssuers);
 
             report("Requesting attestation from issuers. Count is " + attestationsToComplete.size());
-            List<PossibleError> possibleErrors = requestAttestationFromIssuers(attestationsToComplete, phoneNumber, clientAddress, SALT, useSecurityCode);
+            List<PossibleError> possibleErrors = requestAttestationFromIssuers(attestationsToComplete, phoneNumber, clientAddress, salt, useSecurityCode);
 
             for (PossibleError error: possibleErrors) {
                 if (error.known) {
@@ -193,10 +518,10 @@ class AttestationUtil {
     }
 
     // https://github.com/celo-org/celo-monorepo/blob/master/packages/env-tests/src/shared/attestation.ts#L26
-    private static List<PossibleError> requestAttestationFromIssuers(List<AttestationServiceURLLookupResult> attestationsToReveal, String phoneNumber, String account, String pepper, boolean securityCode) {
+    private static List<PossibleError> requestAttestationFromIssuers(List<ActionableAttestation> attestationsToReveal, String phoneNumber, String account, String pepper, boolean securityCode) {
         List<PossibleError> possibleErrors = new ArrayList<>(attestationsToReveal.size());
 
-        for (AttestationServiceURLLookupResult attestation: attestationsToReveal) {
+        for (ActionableAttestation attestation: attestationsToReveal) {
             JSONObject attestationRequest = new JSONObject();
 
             try {
@@ -205,7 +530,9 @@ class AttestationUtil {
                 attestationRequest.put("issuer", attestation.issuer);
                 attestationRequest.put("salt", pepper);
                 // attestationRequest.put("smsRetrieverAppSig", JSONObject.NULL); Undefined in js means don't include to JSON.stringify
-                attestationRequest.put("securityCodePrefix", securityCode ? new BigInteger(Numeric.cleanHexPrefix(account), 16).mod(BigInteger.TEN).toString() : JSONObject.NULL);
+                if (securityCode) {
+                    attestationRequest.put("securityCodePrefix", new BigInteger(Numeric.cleanHexPrefix(account), 16).mod(BigInteger.TEN).toString());
+                }
                 // attestationRequest.put("language", JSONObject.NULL); Undefined in js means don't include to JSON.stringify
             } catch (JSONException e) { }
 
@@ -287,15 +614,15 @@ class AttestationUtil {
 
     }
 
-    private static Tuple2<List<AttestationServiceURLLookupResult>, List<String>> getActionableAttestationsAndNonCompliantIssuers(ContractKit contractKit, byte[] identifier, String account) throws Throwable {
+    private static Tuple2<List<ActionableAttestation>, List<String>> getActionableAttestationsAndNonCompliantIssuers(ContractKit contractKit, byte[] identifier, String account) throws Throwable {
         report("Looking up attestation service urls");
 
-        AttestationServiceURLLookupResult[] lookupResults = lookupAttestationServiceUrls(contractKit, identifier, account);
+        ActionableAttestation[] lookupResults = lookupAttestationServiceUrls(contractKit, identifier, account);
 
-        List<AttestationServiceURLLookupResult> actionableAttestations = new ArrayList<>(lookupResults.length);
+        List<ActionableAttestation> actionableAttestations = new ArrayList<>(lookupResults.length);
         List<String> nonCompliantIssuers = new ArrayList<>(lookupResults.length);
 
-        for (AttestationServiceURLLookupResult lookupResult: lookupResults) {
+        for (ActionableAttestation lookupResult: lookupResults) {
             if (lookupResult.isValid) {
                 actionableAttestations.add(lookupResult);
             }
@@ -308,7 +635,7 @@ class AttestationUtil {
     }
 
     // https://github.com/celo-org/celo-monorepo/blob/218f32526b45d77bd23d1375907b791cfdf0f619/packages/sdk/contractkit/src/wrappers/Attestations.ts#L273
-    private static AttestationServiceURLLookupResult[] lookupAttestationServiceUrls(ContractKit contractKit, byte[] identifier, String account) throws Throwable {
+    private static ActionableAttestation[] lookupAttestationServiceUrls(ContractKit contractKit, byte[] identifier, String account) throws Throwable {
         final int tries = 3;
 
         AttestationsWrapper attestations = contractKit.contracts.getAttestations();
@@ -320,7 +647,7 @@ class AttestationUtil {
 
         String[] metadataURLs = parseSolidityStringArray(rawCompletableAttestations.component3(), rawCompletableAttestations.component4());
 
-        AttestationServiceURLLookupResult[] lookupResults = new AttestationServiceURLLookupResult[metadataURLs.length];
+        ActionableAttestation[] lookupResults = new ActionableAttestation[metadataURLs.length];
 
         report(lookupResults.length + " completable attestations found");
 
@@ -516,7 +843,7 @@ class AttestationUtil {
     }
 
     // https://github.com/celo-org/celo-monorepo/blob/218f32526b45d77bd23d1375907b791cfdf0f619/packages/sdk/contractkit/src/wrappers/Attestations.ts#L314
-    private static AttestationServiceURLLookupResult lookupAttestationServiceURL(ContractKit contractKit, BigInteger blockNumber, String issuer, String metadataURL) {
+    private static ActionableAttestation lookupAttestationServiceURL(ContractKit contractKit, BigInteger blockNumber, String issuer, String metadataURL) {
         final int tries = 3;
 
         try {
@@ -564,17 +891,17 @@ class AttestationUtil {
             String version = json.getString("version");
 
             if (!"ok".equals(status)) {
-                return AttestationServiceURLLookupResult.invalid(issuer);
+                return ActionableAttestation.invalid(issuer);
             }
 
-            return AttestationServiceURLLookupResult.valid(blockNumber, issuer, attestationServiceURLClaim.url, name, version);
+            return ActionableAttestation.valid(blockNumber, issuer, attestationServiceURLClaim.url, name, version);
         } catch (Throwable t) {
             Log.e(TAG, "Failed to lookup attestation service URL.", t);
-            return AttestationServiceURLLookupResult.invalid(issuer);
+            return ActionableAttestation.invalid(issuer);
         }
     }
 
-    private static class AttestationServiceURLLookupResult {
+    private static class ActionableAttestation {
 
         boolean isValid;
         BigInteger blockNumber;
@@ -583,15 +910,15 @@ class AttestationUtil {
         String name;
         String version;
 
-        static AttestationServiceURLLookupResult invalid(String issuer) {
-            AttestationServiceURLLookupResult result = new AttestationServiceURLLookupResult();
+        static ActionableAttestation invalid(String issuer) {
+            ActionableAttestation result = new ActionableAttestation();
             result.isValid = false;
             result.issuer = issuer;
             return result;
         }
 
-        static AttestationServiceURLLookupResult valid(BigInteger blockNumber, String issuer, String attestationServiceUrl, String name, String version) {
-            AttestationServiceURLLookupResult result = new AttestationServiceURLLookupResult();
+        static ActionableAttestation valid(BigInteger blockNumber, String issuer, String attestationServiceUrl, String name, String version) {
+            ActionableAttestation result = new ActionableAttestation();
             result.isValid = true;
             result.blockNumber = blockNumber;
             result.issuer = issuer;

@@ -111,7 +111,7 @@ public class CeloSDK {
         mLocalHandler.sendMessage(message);
     }
 
-    public void isPhoneNumberOwned(String phoneNumber, PhoneNumberOwnershipLookupCallback callback) {
+    public void isPhoneNumberOwned(String phoneNumber, PhoneNumberOwnershipLookupCallback callback) { // TODO
         if (!Utils.E164_REGEX.matcher(phoneNumber).matches()) {
             throw new IllegalArgumentException("Invalid phone number format.");
         }
@@ -125,7 +125,7 @@ public class CeloSDK {
         mLocalHandler.sendMessage(Message.obtain(mLocalHandler, MESSAGE_LOOKUP_PHONE_NUMBER_OWNERSHIP, phoneNumber));
     }
 
-    public void requestAttestationForPhoneNumber(String phoneNumber, AttestationRequestCallback callback) {
+    public void requestAttestationsForPhoneNumber(String phoneNumber, AttestationRequestCallback callback) {
         if (!Utils.E164_REGEX.matcher(phoneNumber).matches()) {
             throw new IllegalArgumentException("Invalid phone number format.");
         }
@@ -133,6 +133,32 @@ public class CeloSDK {
         getContractKit((success, contractKit, errorCause) -> {
             if (errorCause != null) {
                 callback.onAttestationRequestResult(false, 0, 0, 0, new CeloException(CeloError.CONTRACT_KIT_ERROR, errorCause));
+                return;
+            }
+
+            String salt;
+
+            try {
+                salt = ODISSaltUtil.getSalt(mContext, contractKit, mCeloContext.odisURL, mCeloContext.odisPublicKey, phoneNumber);
+            } catch (CeloException e) {
+                callback.onAttestationRequestResult(false, 0, 0, 0, new CeloException(CeloError.SALTING_ERROR, e));
+                return;
+            }
+
+            AttestationUtil.AttestationResult result = AttestationUtil.requestAttestations(contractKit, phoneNumber, salt);
+
+            callback.onAttestationRequestResult(result.countsAreReliable, result.newAttestations, result.totalAttestations, result.completedAttestations, result.errorCause);
+        });
+    }
+
+    public void completeAttestationForPhoneNumber(String phoneNumber, String code, AttestationCompletionCallback callback) {
+        if (!Utils.E164_REGEX.matcher(phoneNumber).matches()) {
+            throw new IllegalArgumentException("Invalid phone number format.");
+        }
+
+        getContractKit((success, contractKit, errorCause) -> {
+            if (errorCause != null) {
+                callback.onAttestationCompletionResult(errorCause);
                 return;
             }
 
@@ -204,7 +230,7 @@ public class CeloSDK {
         String salt;
 
         try {
-            salt = ODISSaltUtil.getSalt(mContractKit, mCeloContext.odisURL, mCeloContext.odisPublicKey, phoneNumber);
+            salt = ODISSaltUtil.getSalt(mContext, mContractKit, mCeloContext.odisURL, mCeloContext.odisPublicKey, phoneNumber);
         } catch (CeloException e) {
             throw new CeloException(CeloError.SALTING_ERROR, e);
         }
