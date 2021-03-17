@@ -1,7 +1,6 @@
 package works.heymate.celo;
 
 import android.content.Context;
-import android.content.SharedPreferences;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.Looper;
@@ -12,28 +11,24 @@ import org.celo.contractkit.Utils;
 import org.celo.contractkit.wrapper.AttestationsWrapper;
 import org.web3j.crypto.Credentials;
 import org.web3j.protocol.http.HttpService;
+import org.web3j.utils.Convert;
 
+import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Hashtable;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
-
-import jnr.ffi.annotations.In;
 
 public class CeloSDK {
 
     private static final String TAG = "CeloSDK";
 
-    public static final String NETWORK_MAIN = ContractKit.MAINNET;
-    public static final String NETWORK_ALFAJORES = ContractKit.ALFAJORES_TESTNET;
-    public static final String NETWORK_BAKLAVA = ContractKit.BAKLAVA_TESTNET;
-
     private static final int MESSAGE_GET_CONTRACT_KIT = 0;
     private static final int MESSAGE_GET_ADDRESS = 1;
     private static final int MESSAGE_LOOKUP_PHONE_NUMBER = 2;
     private static final int MESSAGE_LOOKUP_PHONE_NUMBER_OWNERSHIP = 3;
+    private static final int MESSAGE_GET_BALANCE = 4;
 
     private static Looper newLooper() {
         HandlerThread thread = new HandlerThread(TAG + "-" + Math.round(Math.random() * 100));
@@ -52,20 +47,21 @@ public class CeloSDK {
     private final List<AddressCallback> mAddressCallbacks = new ArrayList<>(1);
     private final Map<String, List<PhoneNumberLookupCallback>> mPhoneNumberLookupCallbacks = new Hashtable<>(2);
     private final List<PhoneNumberOwnershipLookupCallback> mPhoneNumberOwnershipLookupCallbacks = new ArrayList<>(1);
+    private final List<BalanceCallback> mBalanceCallbacks = new ArrayList<>(1);
 
     private ContractKit mContractKit;
 
-    public CeloSDK(Context context, CeloContext celoContext, String privateKey, String publicKey) {
-        this(context, celoContext, privateKey, publicKey, newLooper());
+    public CeloSDK(Context context, CeloContext celoContext, CeloAccount account) {
+        this(context, celoContext, account, newLooper());
     }
 
-    public CeloSDK(Context context, CeloContext celoContext, String privateKey, String publicKey, Looper looper) {
+    public CeloSDK(Context context, CeloContext celoContext, CeloAccount account, Looper looper) {
         mContext = context.getApplicationContext();
         mLocalHandler = new LocalHandler(looper);
 
         mCeloContext = celoContext;
 
-        mAccount = Credentials.create(privateKey, publicKey);
+        mAccount = Credentials.create(account.privateKey, account.publicKey);
     }
 
     /**
@@ -192,6 +188,62 @@ public class CeloSDK {
                 InternalUtils.runOnMainThread(() -> callback.onAttestationCompletionResult(true, 0, 0, 0, e));
             }
         });
+    }
+
+    public void getBalance(BalanceCallback callback) {
+        mBalanceCallbacks.add(callback);
+
+        if (mBalanceCallbacks.size() > 1) {
+            return;
+        }
+
+        mLocalHandler.sendEmptyMessage(MESSAGE_GET_BALANCE);
+    }
+
+    private void getBalanceInternal() {
+        try {
+            BalanceInfo balanceInfo = getBalanceInfo();
+
+            BigInteger one = Convert.toWei(BigDecimal.ONE, Convert.Unit.ETHER).toBigInteger();
+
+            long cUSD = balanceInfo.cUSD.divide(one.divide(BigInteger.valueOf(100L))).longValue();
+            double gold = balanceInfo.gold.divide(one.divide(BigInteger.valueOf(10_000L))).longValue() / 10_000d;
+
+            List<BalanceCallback> callbacks = new ArrayList<>(mBalanceCallbacks);
+            mBalanceCallbacks.clear();
+
+            InternalUtils.runOnMainThread(() -> {
+                for (BalanceCallback callback: callbacks) {
+                    callback.onBalanceResult(true, balanceInfo.cUSD, balanceInfo.gold, cUSD, gold, null);
+                }
+            });
+        } catch (CeloException e) {
+            List<BalanceCallback> callbacks = new ArrayList<>(mBalanceCallbacks);
+            mBalanceCallbacks.clear();
+
+            InternalUtils.runOnMainThread(() -> {
+                for (BalanceCallback callback: callbacks) {
+                    callback.onBalanceResult(false, null, null, 0, 0, e);
+                }
+            });
+        }
+    }
+
+    private BalanceInfo getBalanceInfo() throws CeloException {
+        try {
+            ensureContractKit();
+        } catch (CeloException e) {
+            throw new CeloException(CeloError.CONTRACT_KIT_ERROR, e);
+        }
+
+        try {
+            BigInteger cUSD = mContractKit.contracts.getStableToken().balanceOf(mContractKit.getAddress()).send();
+            BigInteger gold = mContractKit.contracts.getGoldToken().balanceOf(mContractKit.getAddress());
+
+            return new BalanceInfo(cUSD, gold);
+        } catch (Exception e) {
+            throw new CeloException(CeloError.NETWORK_ERROR, e);
+        }
     }
 
     private void lookupPhoneNumberOwnershipInternal(String phoneNumber) {
@@ -386,7 +438,22 @@ public class CeloSDK {
                 case MESSAGE_LOOKUP_PHONE_NUMBER_OWNERSHIP:
                     lookupPhoneNumberOwnershipInternal((String) msg.obj);
                     return;
+                case MESSAGE_GET_BALANCE:
+                    getBalanceInternal();
+                    return;
             }
+        }
+
+    }
+
+    private static class BalanceInfo {
+
+        final BigInteger cUSD;
+        final BigInteger gold;
+
+        BalanceInfo(BigInteger cUSD, BigInteger gold) {
+            this.cUSD = cUSD;
+            this.gold = gold;
         }
 
     }

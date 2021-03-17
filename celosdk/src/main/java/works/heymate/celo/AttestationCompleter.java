@@ -2,6 +2,7 @@ package works.heymate.celo;
 
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.util.Base64;
 import android.util.Log;
 
 import org.celo.contractkit.ContractKit;
@@ -22,21 +23,22 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.regex.MatchResult;
+import java.util.regex.Pattern;
 
 class AttestationCompleter {
 
     private static final String TAG = "Attestation";
+
+    private static final String ATTESTATION_CODE_REGEX = "(.* |^)(?:celo:\\/\\/wallet\\/v\\/)?([a-zA-Z0-9=\\+\\/_-]{87,88})($| .*)";
+    private static final String ATTESTATION_CODE_PREFIX = "celo://wallet/v/";
 
     private static final int CODE_LENGTH = 8;
     private static final String NULL_ADDRESS = "0x0000000000000000000000000000000000000000";
 
     // Valora app : verification.ts : attestationCodeReceiver
     public static void completeAttestation(Context context, ContractKit contractKit, String phoneNumber, String salt, String code) throws CeloException {
-        if (code.length() != CODE_LENGTH) {
-            throw new CeloException(CeloError.INVALID_ATTESTATION_CODE, null);
-        }
-
-        byte[] identifier = Utils.getPhoneHash(phoneNumber, salt);
+        code = code.replaceAll("([¿§])", "_");  // Someone doesn't know why this is happening. I don't even know what this is.
 
         SharedPreferences sharedPreferences = context.getSharedPreferences(TAG, Context.MODE_PRIVATE);
 
@@ -46,9 +48,29 @@ class AttestationCompleter {
             throw new CeloException(CeloError.ATTESTATION_CODE_USED, null);
         }
 
+        byte[] identifier = Utils.getPhoneHash(phoneNumber, salt);
+
         List<AttestationRequester.ActionableAttestation> attestations = AttestationRequester.getActionableAttestationsAndNonCompliantIssuers(contractKit, identifier).component1();
 
-        String attestationCode = getAttestationCodeForSecurityCode(contractKit, phoneNumber, salt, code, attestations);
+        String attestationCode;
+
+        if (code.matches(ATTESTATION_CODE_REGEX)) {
+            // https://github.com/celo-org/celo-monorepo/blob/79d0efaf50e99ff66984269d5675e4abb0e6b46f/packages/sdk/base/src/attestations.ts#L53
+            int prefixIndex = code.indexOf(ATTESTATION_CODE_PREFIX);
+
+            if (prefixIndex < 0) {
+                throw new CeloException(CeloError.INVALID_ATTESTATION_CODE, null);
+            }
+
+            attestationCode = Numeric.toHexString(Base64.decode(code.substring(prefixIndex + ATTESTATION_CODE_PREFIX.length()), Base64.DEFAULT));
+        }
+        else {
+            if (code.length() != CODE_LENGTH) {
+                throw new CeloException(CeloError.INVALID_ATTESTATION_CODE, null);
+            }
+
+            attestationCode = getAttestationCodeForSecurityCode(contractKit, phoneNumber, salt, code, attestations);
+        }
 
         String issuer = findMatchingIssuer(contractKit, identifier, attestations, attestationCode);
 

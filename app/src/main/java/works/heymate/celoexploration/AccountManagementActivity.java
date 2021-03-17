@@ -2,7 +2,9 @@ package works.heymate.celoexploration;
 
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.View;
 import android.view.inputmethod.EditorInfo;
 import android.widget.EditText;
@@ -12,6 +14,13 @@ import android.widget.Toast;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
+
+import works.heymate.celo.AttestationCompletionCallback;
+import works.heymate.celo.AttestationRequestCallback;
+import works.heymate.celo.CeloAccount;
+import works.heymate.celo.CeloContext;
+import works.heymate.celo.CeloException;
+import works.heymate.celo.CeloSDK;
 
 /**
  * Current account
@@ -176,10 +185,10 @@ public class AccountManagementActivity extends AppCompatActivity implements Celo
         input.setHint("Phone number");
 
         // TODO Remove
-//        input.setText("+380731940555");
+        input.setText("+380731940555");
 //        input.setText("+4915166848938");
 //        input.setText("+989124152410");
-        input.setText("+4917670176202");
+//        input.setText("+4917670176202");
 
 
         new AlertDialog.Builder(this)
@@ -193,17 +202,17 @@ public class AccountManagementActivity extends AppCompatActivity implements Celo
                         return;
                     }
 
-                    String error = mCelo.attestPhoneNumber(text, new AttestationRequestCallback() {
+                    Context context = getApplicationContext();
+                    SharedPreferences mPreferences = context.getSharedPreferences("CeloThingy", Context.MODE_PRIVATE);
+                    String privateKey = mPreferences.getString("private_key", null);
+                    String publicKey = mPreferences.getString("public_key", null);
 
-                        @Override
-                        public void progressUpdate(String update) {
-                            if (mProgressDialog != null) {
-                                mProgressDialog.setMessage(update);
-                            }
-                        }
+                    CeloSDK celoSDK = new CeloSDK(context, CeloContext.ALFAJORES, new CeloAccount(privateKey, publicKey));
 
+                    celoSDK.completeAttestationForPhoneNumber(text, "celo://wallet/v/cipbw17/qRYWtDtnAXGIZQ6/UrMIfuvuWqhptxAs7ux1HPC4qwt+b+BKJGSK/Ud0R42c9Kpyho74S9l4tI2a6hw=", new AttestationCompletionCallback() {
                         @Override
-                        public void onAttestationRequestResult(boolean success, boolean requested, String message) {
+                        public void onAttestationCompletionResult(boolean verified, int completed, int total, int remaining, CeloException errorCause) {
+                            Log.d("AAA", "" + verified, errorCause);
                             mSettingPhoneNumber = false;
                             if (!isFinishing()) {
                                 updateSetPhoneNumberButton();
@@ -212,16 +221,53 @@ public class AccountManagementActivity extends AppCompatActivity implements Celo
                                     mProgressDialog.dismiss();
                                 }
                             }
-
-                            Toast.makeText(getApplicationContext(), message, Toast.LENGTH_LONG).show();
                         }
-
                     });
 
-                    if (error != null) {
-                        Toast.makeText(AccountManagementActivity.this, error, Toast.LENGTH_SHORT).show();
-                        return;
-                    }
+//                    celoSDK.requestAttestationsForPhoneNumber(text, new AttestationRequestCallback() {
+//                        @Override
+//                        public void onAttestationRequestResult(boolean countsAreReliable, int newAttestations, int totalAttestations, int completedAttestations, CeloException errorCause) {
+//                            Log.d("AAA", "" + countsAreReliable, errorCause);
+//                            mSettingPhoneNumber = false;
+//                            if (!isFinishing()) {
+//                                updateSetPhoneNumberButton();
+//
+//                                if (mProgressDialog != null) {
+//                                    mProgressDialog.dismiss();
+//                                }
+//                            }
+//                        }
+//                    });
+
+//                    String error = mCelo.attestPhoneNumber(text, new AttestationRequestCallback() {
+//
+//                        @Override
+//                        public void progressUpdate(String update) {
+//                            if (mProgressDialog != null) {
+//                                mProgressDialog.setMessage(update);
+//                            }
+//                        }
+//
+//                        @Override
+//                        public void onAttestationRequestResult(boolean success, boolean requested, String message) {
+//                            mSettingPhoneNumber = false;
+//                            if (!isFinishing()) {
+//                                updateSetPhoneNumberButton();
+//
+//                                if (mProgressDialog != null) {
+//                                    mProgressDialog.dismiss();
+//                                }
+//                            }
+//
+//                            Toast.makeText(getApplicationContext(), message, Toast.LENGTH_LONG).show();
+//                        }
+//
+//                    });
+//
+//                    if (error != null) {
+//                        Toast.makeText(AccountManagementActivity.this, error, Toast.LENGTH_SHORT).show();
+//                        return;
+//                    }
 
                     mSettingPhoneNumber = true;
                     updateSetPhoneNumberButton();

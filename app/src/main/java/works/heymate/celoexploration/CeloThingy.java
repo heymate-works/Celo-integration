@@ -93,7 +93,7 @@ public class CeloThingy extends Handler {
         super(looper);
 
         mContext = context;
-        mPreferences = mContext.getSharedPreferences(TAG, Context.MODE_PRIVATE);;
+        mPreferences = mContext.getSharedPreferences(TAG, Context.MODE_PRIVATE);
 
         mMainThread = new Handler(Looper.getMainLooper());
     }

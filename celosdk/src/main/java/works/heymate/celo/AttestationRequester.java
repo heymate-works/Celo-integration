@@ -139,7 +139,27 @@ class AttestationRequester {
 
         byte[] phoneHash = Utils.getPhoneHash(phoneNumber, salt);
 
+        boolean caseA = AttestationsWrapper.isAccountConsideredVerified(status, NUM_ATTESTATIONS_REQUIRED, DEFAULT_ATTESTATION_THRESHOLD).isVerified;
+        boolean vaseB = !AttestationsWrapper.isAccountConsideredVerified(status, NUM_ATTESTATIONS_REQUIRED, DEFAULT_ATTESTATION_THRESHOLD).isVerified;
+
+        if (caseA) {
+            Log.d("AAA", "AAAAAAA");
+        }
+
+        if (vaseB) {
+            Log.d("AAA", "BBBBBB");
+        }
+
         if (!AttestationsWrapper.isAccountConsideredVerified(status, NUM_ATTESTATIONS_REQUIRED, DEFAULT_ATTESTATION_THRESHOLD).isVerified) {
+
+            if (caseA) {
+                Log.d("AAA", "AAAAAAA");
+            }
+
+            if (vaseB) {
+                Log.d("AAA", "BBBBBB");
+            }
+            withoutRevealing = false; // TODO Make sense of this
             if (status.completed > 0) {
                 try {
                     List<String> associatedAccounts = contractKit.contracts.getAttestations().lookupAccountsForIdentifier(phoneHash).send();
@@ -184,13 +204,24 @@ class AttestationRequester {
 
                     int attestationsAfter = attestations.size();
 
-                    result.newAttestations += attestationsAfter - attestationsBefore;
+                    int newAttestations = attestationsAfter - attestationsBefore;
+                    result.newAttestations += newAttestations;
+                    result.totalAttestations += newAttestations;
 
                     revealAttestations(contractKit, attestations, phoneNumber, salt);
                 }
             }
         }
-        return null;
+
+        if (caseA) {
+            Log.d("AAA", "AAAAAAA");
+        }
+
+        if (vaseB) {
+            Log.d("AAA", "BBBBBB");
+        }
+
+        return new Tuple2<>(result, false);
     }
 
     private static List<ActionableAttestation> requestAndRetrieveAttestations(
