@@ -19,6 +19,9 @@ public enum CeloError {
     MAX_ACTIONABLE_ATTESTATIONS_EXCEEDED("Can't have too many attestations at the same time"),
     ATTESTATION_SLOW_BLOCKS("Timed out while waiting for enough blocks before calling selectIssuers"),
 
+    ATTESTATION_CODE_USED("Attestation code is already used"),
+    INVALID_ATTESTATION_CODE("Invalid attestation code"),
+
     INSUFFICIENT_BALANCE("Insufficient balance to perform the operation"),
     ;
 

@@ -1,6 +1,7 @@
 package works.heymate.celo;
 
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.Looper;
@@ -8,13 +9,18 @@ import android.os.Message;
 
 import org.celo.contractkit.ContractKit;
 import org.celo.contractkit.Utils;
+import org.celo.contractkit.wrapper.AttestationsWrapper;
 import org.web3j.crypto.Credentials;
 import org.web3j.protocol.http.HttpService;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Hashtable;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+
+import jnr.ffi.annotations.In;
 
 public class CeloSDK {
 
@@ -111,7 +117,7 @@ public class CeloSDK {
         mLocalHandler.sendMessage(message);
     }
 
-    public void isPhoneNumberOwned(String phoneNumber, PhoneNumberOwnershipLookupCallback callback) { // TODO
+    public void lookupPhoneNumberOwnership(String phoneNumber, PhoneNumberOwnershipLookupCallback callback) {
         if (!Utils.E164_REGEX.matcher(phoneNumber).matches()) {
             throw new IllegalArgumentException("Invalid phone number format.");
         }
@@ -132,7 +138,7 @@ public class CeloSDK {
 
         getContractKit((success, contractKit, errorCause) -> {
             if (errorCause != null) {
-                callback.onAttestationRequestResult(false, 0, 0, 0, new CeloException(CeloError.CONTRACT_KIT_ERROR, errorCause));
+                InternalUtils.runOnMainThread(() -> callback.onAttestationRequestResult(false, 0, 0, 0, new CeloException(CeloError.CONTRACT_KIT_ERROR, errorCause)));
                 return;
             }
 
@@ -141,13 +147,13 @@ public class CeloSDK {
             try {
                 salt = ODISSaltUtil.getSalt(mContext, contractKit, mCeloContext.odisURL, mCeloContext.odisPublicKey, phoneNumber);
             } catch (CeloException e) {
-                callback.onAttestationRequestResult(false, 0, 0, 0, new CeloException(CeloError.SALTING_ERROR, e));
+                InternalUtils.runOnMainThread(() -> callback.onAttestationRequestResult(false, 0, 0, 0, new CeloException(CeloError.SALTING_ERROR, e)));
                 return;
             }
 
-            AttestationUtil.AttestationResult result = AttestationUtil.requestAttestations(contractKit, phoneNumber, salt);
+            AttestationRequester.AttestationResult result = AttestationRequester.requestAttestations(contractKit, phoneNumber, salt);
 
-            callback.onAttestationRequestResult(result.countsAreReliable, result.newAttestations, result.totalAttestations, result.completedAttestations, result.errorCause);
+            InternalUtils.runOnMainThread(() -> callback.onAttestationRequestResult(result.countsAreReliable, result.newAttestations, result.totalAttestations, result.completedAttestations, result.errorCause));
         });
     }
 
@@ -158,33 +164,85 @@ public class CeloSDK {
 
         getContractKit((success, contractKit, errorCause) -> {
             if (errorCause != null) {
-                callback.onAttestationCompletionResult(errorCause);
+                InternalUtils.runOnMainThread(() -> callback.onAttestationCompletionResult(false, 0, 0, 0, errorCause));
                 return;
             }
 
-            // TODO
+            String salt;
+
+            try {
+                salt = ODISSaltUtil.getSalt(mContext, contractKit, mCeloContext.odisURL, mCeloContext.odisPublicKey, phoneNumber);
+            } catch (CeloException e) {
+                InternalUtils.runOnMainThread(() -> callback.onAttestationCompletionResult(false, 0, 0, 0, new CeloException(CeloError.SALTING_ERROR, e)));
+                return;
+            }
+
+            try {
+                AttestationCompleter.completeAttestation(mContext, contractKit, phoneNumber, salt, code);
+            } catch (CeloException e) {
+                InternalUtils.runOnMainThread(() -> callback.onAttestationCompletionResult(false, 0, 0, 0, e));
+                return;
+            }
+
+            try {
+                AttestationsWrapper.AttestationsStatus status = lookupPhoneNumberVerificationStatus(phoneNumber);
+
+                InternalUtils.runOnMainThread(() -> callback.onAttestationCompletionResult(true, status.completed, status.total, status.numAttestationsRemaining, null));
+            } catch (CeloException e) {
+                InternalUtils.runOnMainThread(() -> callback.onAttestationCompletionResult(true, 0, 0, 0, e));
+            }
         });
     }
 
     private void lookupPhoneNumberOwnershipInternal(String phoneNumber) {
         try {
-            List<String> addresses = lookupAddressesForPhoneNumber(phoneNumber);
-
-            boolean owned = addresses != null && addresses.contains(mContractKit.getAddress());
+            AttestationsWrapper.AttestationsStatus status = lookupPhoneNumberVerificationStatus(phoneNumber);
 
             List<PhoneNumberOwnershipLookupCallback> callbacks = new ArrayList<>(mPhoneNumberOwnershipLookupCallbacks);
             mPhoneNumberOwnershipLookupCallbacks.clear();
 
-            for (PhoneNumberOwnershipLookupCallback callback: callbacks) {
-                callback.onPhoneNumberOwnershipLookupResult(true, owned, null);
-            }
+            InternalUtils.runOnMainThread(() -> {
+                for (PhoneNumberOwnershipLookupCallback callback: callbacks) {
+                    callback.onPhoneNumberOwnershipLookupResult(true, status.isVerified, status.completed, status.total, status.numAttestationsRemaining, null);
+                }
+            });
         } catch (CeloException e) {
             List<PhoneNumberOwnershipLookupCallback> callbacks = new ArrayList<>(mPhoneNumberOwnershipLookupCallbacks);
             mPhoneNumberOwnershipLookupCallbacks.clear();
 
-            for (PhoneNumberOwnershipLookupCallback callback: callbacks) {
-                callback.onPhoneNumberOwnershipLookupResult(false, false, e);
-            }
+            InternalUtils.runOnMainThread(() -> {
+                for (PhoneNumberOwnershipLookupCallback callback: callbacks) {
+                    callback.onPhoneNumberOwnershipLookupResult(false, false, 0, 0, 0, e);
+                }
+            });
+        }
+    }
+
+    private AttestationsWrapper.AttestationsStatus lookupPhoneNumberVerificationStatus(String phoneNumber) throws CeloException {
+        try {
+            ensureContractKit();
+        } catch (CeloException e) {
+            throw new CeloException(CeloError.CONTRACT_KIT_ERROR, e);
+        }
+
+        String salt;
+
+        try {
+            salt = ODISSaltUtil.getSalt(mContext, mContractKit, mCeloContext.odisURL, mCeloContext.odisPublicKey, phoneNumber);
+        } catch (CeloException e) {
+            throw new CeloException(CeloError.SALTING_ERROR, e);
+        }
+
+        byte[] identifier = Utils.getPhoneHash(phoneNumber, salt);
+
+        try {
+            return mContractKit.contracts.getAttestations().getVerifiedStatus(
+                    identifier, mContractKit.getAddress(),
+                    AttestationRequester.NUM_ATTESTATIONS_REQUIRED,
+                    AttestationRequester.DEFAULT_ATTESTATION_THRESHOLD
+            );
+        } catch (Exception e) {
+            throw new CeloException(CeloError.NETWORK_ERROR, e);
         }
     }
 

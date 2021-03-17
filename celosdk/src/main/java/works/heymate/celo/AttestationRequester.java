@@ -33,12 +33,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-/**
- * getAttestationStat() to find out how attestation is going.
- * requestAttestations() to trigger the sending of SMSs.
- *
- */
-class AttestationUtil {
+class AttestationRequester {
 
     private static final String TAG = "Attestation";
 
@@ -72,10 +67,10 @@ class AttestationUtil {
     // How many attestations should be requested at maximum
     private static final int MAX_ATTESTATIONS = 3;
 
-    private static final int NUM_ATTESTATIONS_REQUIRED = 3;
+    static final int NUM_ATTESTATIONS_REQUIRED = 3;
     private static final int MAX_ACTIONABLE_ATTESTATIONS = 5;
 
-    private static final double DEFAULT_ATTESTATION_THRESHOLD = 0.25d;
+    static final double DEFAULT_ATTESTATION_THRESHOLD = 0.25d;
 
     private static final String CLAIM_TYPE_ATTESTATION_SERVICE_URL = "ATTESTATION_SERVICE_URL";
     private static final String CLAIM_TYPE_ACCOUNT = "ACCOUNT";
@@ -332,7 +327,7 @@ class AttestationUtil {
     }
 
 
-    private static Tuple2<List<ActionableAttestation>, List<String>> getActionableAttestationsAndNonCompliantIssuers(ContractKit contractKit, byte[] identifier) throws CeloException {
+    static Tuple2<List<ActionableAttestation>, List<String>> getActionableAttestationsAndNonCompliantIssuers(ContractKit contractKit, byte[] identifier) throws CeloException {
         ActionableAttestation[] lookupResults = lookupAttestationServiceUrls(contractKit, identifier);
 
         List<ActionableAttestation> actionableAttestations = new ArrayList<>(lookupResults.length);
@@ -901,7 +896,7 @@ class AttestationUtil {
         }
     }
 
-    private static class ActionableAttestation {
+    static class ActionableAttestation {
 
         boolean isValid;
         BigInteger blockNumber;
@@ -1000,19 +995,19 @@ class AttestationUtil {
     }
 
     private static boolean verifySignerForAddress(ContractKit contractKit, byte[] hash, String signature, String address) throws Throwable {
-        if (!verifySignature(hash, signature, address)) {
+        if (verifySignature(hash, signature, address) == null) {
             AccountsWrapper accounts = contractKit.contracts.getAccounts();
 
             if (accounts.isAccount(address).send()) {
-                if (verifySignature(hash, signature, accounts.getVoteSigner(address).send())) {
+                if (verifySignature(hash, signature, accounts.getVoteSigner(address).send()) != null) {
                     return true;
                 }
 
-                if (verifySignature(hash, signature, accounts.getValidatorSigner(address).send())) {
+                if (verifySignature(hash, signature, accounts.getValidatorSigner(address).send()) != null) {
                     return true;
                 }
 
-                return verifySignature(hash, signature, accounts.getAttestationSigner(address).send());
+                return verifySignature(hash, signature, accounts.getAttestationSigner(address).send()) != null;
             }
 
             return false;
@@ -1022,7 +1017,9 @@ class AttestationUtil {
     }
 
     // https://github.com/celo-org/celo-monorepo/blob/218f32526b45d77bd23d1375907b791cfdf0f619/packages/sdk/utils/src/signatureUtils.ts#L102
-    private static boolean verifySignature(byte[] message, String signature, String signer) {
+    static Sign.SignatureData verifySignature(byte[] message, String signature, String signer) {
+        Sign.SignatureData bypassing = null;
+
         signature = signature.substring(2);
 
         byte[] messageHash = hashMessageWithPrefix(message);
@@ -1039,8 +1036,14 @@ class AttestationUtil {
                 v += 27;
             }
 
-            if (isValidSignature(signer, messageHash, v, r, s)) {
-                return true;
+            try {
+                bypassing = new Sign.SignatureData(v, r, s);
+            } catch (Throwable t) {}
+
+            Sign.SignatureData signatureData = isValidSignature(signer, messageHash, v, r, s);
+
+            if (signatureData != null) {
+                return signatureData;
             }
         } catch (Throwable t) {
             Log.w(TAG, "Parsing signature failed.", t);
@@ -1054,8 +1057,14 @@ class AttestationUtil {
                 v += 27;
             }
 
-            if (isValidSignature(signer, messageHash, v, r, s)) {
-                return true;
+            try {
+                bypassing = new Sign.SignatureData(v, r, s);
+            } catch (Throwable t) {}
+
+            Sign.SignatureData signatureData = isValidSignature(signer, messageHash, v, r, s);
+
+            if (signatureData != null) {
+                return signatureData;
             }
         } catch (Throwable t) {
             Log.w(TAG, "Parsing signature failed.", t);
@@ -1064,10 +1073,11 @@ class AttestationUtil {
         Log.w(TAG, "Unable to parse signature (expected signer " + signer + ")");
 
         // TODO Bypassing security check. This is a technical dept here.
-        return true; // Should return false
+
+        return bypassing; // Should return false
     }
 
-    private static boolean isValidSignature(String signer, byte[] message, byte v, byte[] r, byte[] s) {
+    private static Sign.SignatureData isValidSignature(String signer, byte[] message, byte v, byte[] r, byte[] s) {
         try {
             Sign.SignatureData signatureData = new Sign.SignatureData(v, r, s);
 
@@ -1077,9 +1087,9 @@ class AttestationUtil {
 
             signer = Numeric.cleanHexPrefix(signer);
 
-            return retrievedAddress.equals(signer);
+            return retrievedAddress.equals(signer) ? signatureData : null;
         } catch (Throwable t) {
-            return false;
+            return null;
         }
     }
 
