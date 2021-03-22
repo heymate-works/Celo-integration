@@ -32,14 +32,27 @@ android {
     }
 }
 
+repositories {
+    google()
+    jcenter()
+    maven {
+        url  "https://dl.bintray.com/celo/celo"
+    }
+}
+
 dependencies {
     coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:1.1.5'
 
-    implementation fileTree(dir: 'libs', include: ['*.aar'])
+    implementation fileTree(dir: 'libs', include: ['*.jar'])
 
     testImplementation 'junit:junit:4.+'
     androidTestImplementation 'com.android.support.test:runner:1.0.2'
     androidTestImplementation 'com.android.support.test.espresso:espresso-core:3.0.2'
 
-    implementation ('org.celo:contractkit:0.0.1')
+//    implementation 'org.web3j:core:4.6.0-android'
+    implementation ('org.celo:contractkit:0.0.1') {
+//        exclude group: 'org.web3j', module: 'core'
+    }
+//    implementation ('com.sun.jna:jna:3.0.9')
+    implementation ('net.java.dev.jna:jna:5.7.0')
 }

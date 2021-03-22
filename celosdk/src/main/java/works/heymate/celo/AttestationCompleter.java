@@ -30,7 +30,7 @@ class AttestationCompleter {
 
     private static final String TAG = "Attestation";
 
-    private static final String ATTESTATION_CODE_REGEX = "(.* |^)(?:celo:\\/\\/wallet\\/v\\/)?([a-zA-Z0-9=\\+\\/_-]{87,88})($| .*)";
+    // private static final String ATTESTATION_CODE_REGEX = "(.* |^)(?:celo:\\/\\/wallet\\/v\\/)?([a-zA-Z0-9=\\+\\/_-]{87,88})($| .*)";
     private static final String ATTESTATION_CODE_PREFIX = "celo://wallet/v/";
 
     private static final int CODE_LENGTH = 8;
@@ -38,13 +38,24 @@ class AttestationCompleter {
 
     // Valora app : verification.ts : attestationCodeReceiver
     public static void completeAttestation(Context context, ContractKit contractKit, String phoneNumber, String salt, String code) throws CeloException {
-        code = code.replaceAll("([¿§])", "_");  // Someone doesn't know why this is happening. I don't even know what this is.
+        String attestationCode = AttestationCodeUtil.extractURL(code);
+        String securityCode = null;
+
+        if (attestationCode == null) {
+            securityCode = AttestationCodeUtil.extractCode(code);
+
+            if (securityCode == null) {
+                throw new CeloException(CeloError.BAD_ATTESTATION_CODE, null);
+            }
+        }
 
         SharedPreferences sharedPreferences = context.getSharedPreferences(TAG, Context.MODE_PRIVATE);
 
         Set<String> previousCodes = sharedPreferences.getStringSet(phoneNumber, new HashSet<>());
 
-        if (previousCodes.contains(code)) {
+        String cachedCode = attestationCode != null ? attestationCode : securityCode;
+
+        if (previousCodes.contains(cachedCode)) {
             throw new CeloException(CeloError.ATTESTATION_CODE_USED, null);
         }
 
@@ -52,24 +63,13 @@ class AttestationCompleter {
 
         List<AttestationRequester.ActionableAttestation> attestations = AttestationRequester.getActionableAttestationsAndNonCompliantIssuers(contractKit, identifier).component1();
 
-        String attestationCode;
-
-        if (code.matches(ATTESTATION_CODE_REGEX)) {
-            // https://github.com/celo-org/celo-monorepo/blob/79d0efaf50e99ff66984269d5675e4abb0e6b46f/packages/sdk/base/src/attestations.ts#L53
-            int prefixIndex = code.indexOf(ATTESTATION_CODE_PREFIX);
-
-            if (prefixIndex < 0) {
-                throw new CeloException(CeloError.INVALID_ATTESTATION_CODE, null);
-            }
-
-            attestationCode = Numeric.toHexString(Base64.decode(code.substring(prefixIndex + ATTESTATION_CODE_PREFIX.length()), Base64.DEFAULT));
+        if (attestationCode != null) {
+            attestationCode = Numeric.toHexString(Base64.decode(attestationCode.substring(ATTESTATION_CODE_PREFIX.length()), Base64.DEFAULT));
         }
         else {
-            if (code.length() != CODE_LENGTH) {
-                throw new CeloException(CeloError.INVALID_ATTESTATION_CODE, null);
-            }
+            attestationCode = getAttestationCodeForSecurityCode(contractKit, phoneNumber, salt, securityCode, attestations);
 
-            attestationCode = getAttestationCodeForSecurityCode(contractKit, phoneNumber, salt, code, attestations);
+            // TODO Can it possibly be previously received but as a url?
         }
 
         String issuer = findMatchingIssuer(contractKit, identifier, attestations, attestationCode);
@@ -94,7 +94,7 @@ class AttestationCompleter {
             throw new CeloException(CeloError.NETWORK_ERROR, e);
         }
 
-        previousCodes.add(code);
+        previousCodes.add(cachedCode);
         sharedPreferences.edit().putStringSet(phoneNumber, previousCodes).apply();
     }
 

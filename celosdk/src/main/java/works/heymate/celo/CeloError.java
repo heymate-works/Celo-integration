@@ -20,6 +20,7 @@ public enum CeloError {
     ATTESTATION_SLOW_BLOCKS("Timed out while waiting for enough blocks before calling selectIssuers"),
 
     ATTESTATION_CODE_USED("Attestation code is already used"),
+    BAD_ATTESTATION_CODE("Invalid attestation code format"),
     INVALID_ATTESTATION_CODE("Invalid attestation code"),
 
     INSUFFICIENT_BALANCE("Insufficient balance to perform the operation"),

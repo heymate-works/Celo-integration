@@ -64,6 +64,10 @@ public class CeloSDK {
         mAccount = Credentials.create(account.privateKey, account.publicKey);
     }
 
+    public Looper getLooper() {
+        return mLocalHandler.getLooper();
+    }
+
     /**
      * callback is called on the looper thread.
      * @param callback
