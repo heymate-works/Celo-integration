@@ -8,7 +8,7 @@ This project is incomplete and under development.
 - Sample app is a mess. Do not try to use it.
 
 ## Working with accounts
-```
+```java
 // First time creating an account
 CeloAccount celoAccount = CeloAccount.randomAccount();
 
@@ -29,7 +29,7 @@ celoAccount = CeloAccount.fromMnemonic(mnemonic);
 ```
 
 ## Communicating with Celo
-```
+```java
 // You wanna keep it as a singleton
 CeloSDK celoSDK = new CeloSDK(context.getApplicationContext(), CeloContext.ALFAJORES, account);
 
