@@ -413,10 +413,6 @@ public class CeloSDK {
                 contractKit = ContractKit.build(new HttpService(mCeloContext.networkAddress));
 
                 contractKit.addAccount(mAccount);
-
-                if (!contractKit.contracts.getAccounts().isAccount(contractKit.getAddress()).send()) {
-                    contractKit.contracts.getAccounts().createAccount().send();
-                }
             } catch (Throwable t) {
                 throw new CeloException(CeloError.NETWORK_ERROR, t);
             }
