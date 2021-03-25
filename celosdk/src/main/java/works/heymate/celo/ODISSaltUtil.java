@@ -25,9 +25,9 @@ public class ODISSaltUtil {
     private static final String AUTHENTICATION_METHOD_ENCRYPTION_KEY = "encryption_key";
     private static final String AUTHENTICATION_METHOD_CUSTOM_SIGNER = "custom_signer";
 
-    private static final String ERROR_ODIS_QUOTA = "odisQuotaError";
+    static final String ERROR_ODIS_QUOTA = "odisQuotaError";
     private static final String ERROR_ODIS_INPUT = "odisBadInputError";
-    private static final String ERROR_ODIS_AUTH = "odisAuthError";
+    static final String ERROR_ODIS_AUTH = "odisAuthError";
     private static final String ERROR_ODIS_CLIENT = "Unknown Client Error";
     private static final String[] ERRORS = {
             ERROR_ODIS_QUOTA, ERROR_ODIS_INPUT, ERROR_ODIS_AUTH, ERROR_ODIS_CLIENT

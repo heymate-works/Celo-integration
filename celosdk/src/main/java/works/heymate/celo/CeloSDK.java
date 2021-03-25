@@ -25,10 +25,21 @@ public class CeloSDK {
     private static final String TAG = "CeloSDK";
 
     private static final int MESSAGE_GET_CONTRACT_KIT = 0;
-    private static final int MESSAGE_GET_ADDRESS = 1;
     private static final int MESSAGE_LOOKUP_PHONE_NUMBER = 2;
     private static final int MESSAGE_LOOKUP_PHONE_NUMBER_OWNERSHIP = 3;
     private static final int MESSAGE_GET_BALANCE = 4;
+
+    // https://discord.com/channels/600834479145353243/786788580944642058/823669465988333578
+    // Asked in Discord from nambrot#9524 Nambrot|cLabs server admin & Protocol Engineer
+    // Q: Do you have to pay for getting phone number hash from ODIS? And won't it be much when you have to query multiple numbers (I know about caching the hashes)?
+    // A: You don't have to explicitly pay for making queries against ODIS, but the key used needs to have some balance/tx history or needs to have attestations. Read more here https://docs.celo.org/developer-guide/contractkit/odis
+    // Q: I want to check if my new user that I have both their phone number and their private-key, has their phone number verified or not. The first thing I have to do is get the phone number salt. Can I conclude that if I get a 403 odisQuotaError or a 401 odisAuthError error from /getBlindedMessageSig it means the account has no transaction history/balance and so definitely not attested with any phone number?
+    // A: 403 - yes, 401 might mean that the signature from the key you are trying to use couldn't be validated
+    public static boolean isSaltHasFailedBecauseOfBrandNewAccount(CeloException exception) {
+        Throwable actualCause = exception.getMainCause().getCause();
+
+        return (actualCause != null && (actualCause.getMessage().contains(ODISSaltUtil.ERROR_ODIS_QUOTA) || (actualCause.getMessage().contains(ODISSaltUtil.ERROR_ODIS_AUTH))));
+    }
 
     private static Looper newLooper() {
         HandlerThread thread = new HandlerThread(TAG + "-" + Math.round(Math.random() * 100));
@@ -44,7 +55,6 @@ public class CeloSDK {
     private final Credentials mAccount;
 
     private final List<ContractKitCallback> mContractKitCallbacks = new ArrayList<>();
-    private final List<AddressCallback> mAddressCallbacks = new ArrayList<>(1);
     private final Map<String, List<PhoneNumberLookupCallback>> mPhoneNumberLookupCallbacks = new Hashtable<>(2);
     private final List<PhoneNumberOwnershipLookupCallback> mPhoneNumberOwnershipLookupCallbacks = new ArrayList<>(1);
     private final List<BalanceCallback> mBalanceCallbacks = new ArrayList<>(1);
@@ -84,14 +94,8 @@ public class CeloSDK {
         mLocalHandler.sendEmptyMessage(MESSAGE_GET_CONTRACT_KIT);
     }
 
-    public void getAddress(AddressCallback callback) {
-        mAddressCallbacks.add(callback);
-
-        if (mAddressCallbacks.size() > 1) {
-            return;
-        }
-
-        mLocalHandler.sendEmptyMessage(MESSAGE_GET_ADDRESS);
+    public String getAddress() {
+        return mAccount.getAddress();
     }
 
     public void lookupPhoneNumber(String phoneNumber, PhoneNumberLookupCallback callback) {
@@ -147,7 +151,16 @@ public class CeloSDK {
             try {
                 salt = ODISSaltUtil.getSalt(mContext, contractKit, mCeloContext.odisURL, mCeloContext.odisPublicKey, phoneNumber);
             } catch (CeloException e) {
-                InternalUtils.runOnMainThread(() -> callback.onAttestationRequestResult(false, 0, 0, 0, new CeloException(CeloError.SALTING_ERROR, e)));
+                CeloException exception;
+
+                if (isSaltHasFailedBecauseOfBrandNewAccount(e)) {
+                    exception = new CeloException(CeloError.INSUFFICIENT_BALANCE, null);
+                }
+                else {
+                    exception = e;
+                }
+
+                InternalUtils.runOnMainThread(() -> callback.onAttestationRequestResult(false, 0, 0, 0, new CeloException(CeloError.SALTING_ERROR, exception)));
                 return;
             }
 
@@ -266,6 +279,15 @@ public class CeloSDK {
             List<PhoneNumberOwnershipLookupCallback> callbacks = new ArrayList<>(mPhoneNumberOwnershipLookupCallbacks);
             mPhoneNumberOwnershipLookupCallbacks.clear();
 
+            if (isSaltHasFailedBecauseOfBrandNewAccount(e)) {
+                InternalUtils.runOnMainThread(() -> {
+                    for (PhoneNumberOwnershipLookupCallback callback: callbacks) {
+                        callback.onPhoneNumberOwnershipLookupResult(true, false, 0, 0, 0, e);
+                    }
+                });
+                return;
+            }
+
             InternalUtils.runOnMainThread(() -> {
                 for (PhoneNumberOwnershipLookupCallback callback: callbacks) {
                     callback.onPhoneNumberOwnershipLookupResult(false, false, 0, 0, 0, e);
@@ -358,28 +380,6 @@ public class CeloSDK {
         }
     }
 
-    private void getAddressInternal() {
-        try {
-            ensureContractKit();
-        } catch (CeloException e) {
-            List<AddressCallback> callbacks = new ArrayList<>(mAddressCallbacks);
-            mAddressCallbacks.clear();
-
-            for (AddressCallback callback: callbacks) {
-                callback.onAddressResult(false, null, e);
-            }
-        }
-
-        String address = mContractKit.getAddress();
-
-        List<AddressCallback> callbacks = new ArrayList<>(mAddressCallbacks);
-        mAddressCallbacks.clear();
-
-        for (AddressCallback callback: callbacks) {
-            callback.onAddressResult(true, address, null);
-        }
-    }
-
     private void getContractKitInternal() {
         try {
             ensureContractKit();
@@ -432,9 +432,6 @@ public class CeloSDK {
             switch (msg.what) {
                 case MESSAGE_GET_CONTRACT_KIT:
                     getContractKitInternal();
-                    return;
-                case MESSAGE_GET_ADDRESS:
-                    getAddressInternal();
                     return;
                 case MESSAGE_LOOKUP_PHONE_NUMBER:
                     lookupPhoneNumberInternal((String) msg.obj);
