@@ -72,6 +72,10 @@ class AttestationCompleter {
             // TODO Can it possibly be previously received but as a url?
         }
 
+        if (attestationCode == null) {
+            throw new CeloException(CeloError.INVALID_ATTESTATION_CODE, null);
+        }
+
         String issuer = findMatchingIssuer(contractKit, identifier, attestations, attestationCode);
 
         if (issuer == null) {
