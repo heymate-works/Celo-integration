@@ -5,6 +5,7 @@ import android.util.Log;
 import org.bouncycastle.jcajce.provider.digest.Keccak;
 import org.celo.contractkit.ContractKit;
 import org.celo.contractkit.Utils;
+import org.celo.contractkit.contract.Attestations;
 import org.celo.contractkit.wrapper.AccountsWrapper;
 import org.celo.contractkit.wrapper.AttestationsWrapper;
 import org.celo.contractkit.wrapper.GasPriceMinimumWrapper;
