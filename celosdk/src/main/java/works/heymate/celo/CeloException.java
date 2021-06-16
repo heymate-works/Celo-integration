@@ -5,7 +5,7 @@ public class CeloException extends Exception {
     private CeloError mError;
 
     public CeloException(CeloError error, Throwable cause) {
-        super(error.getMessage(), cause);
+        super(error != null ? error.getMessage() : null, cause);
 
         mError = error;
     }

@@ -50,7 +50,7 @@ public class ODISSaltUtil {
         String base64BlindedMessage;
 
         try {
-            base64BlindedMessage = blsBlindingClient.blindMessage(Base64.encodeToString(target.getBytes(), Base64.DEFAULT));
+            base64BlindedMessage = blsBlindingClient.blindMessage(Base64.encodeToString(target.getBytes(), Base64.DEFAULT)).trim();
         } catch (Exception e) {
             throw new CeloException(CeloError.BLINDING_ERROR, e);
         }
