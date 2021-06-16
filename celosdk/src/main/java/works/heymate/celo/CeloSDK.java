@@ -12,6 +12,8 @@ import org.celo.contractkit.Utils;
 import org.celo.contractkit.wrapper.AttestationsWrapper;
 import org.web3j.crypto.Credentials;
 import org.web3j.protocol.Web3j;
+import org.web3j.protocol.core.methods.response.TransactionReceipt;
+import org.web3j.protocol.exceptions.TransactionException;
 import org.web3j.protocol.http.HttpService;
 import org.web3j.utils.Convert;
 
@@ -20,7 +22,10 @@ import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Hashtable;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+
+import java8.util.Optional;
 
 public class CeloSDK {
 
@@ -41,6 +46,22 @@ public class CeloSDK {
         Throwable actualCause = exception.getMainCause().getCause();
 
         return (actualCause != null && (actualCause.getMessage().contains(ODISSaltUtil.ERROR_ODIS_QUOTA) || (actualCause.getMessage().contains(ODISSaltUtil.ERROR_ODIS_AUTH))));
+    }
+
+    public static boolean isErrorCausedByInsufficientFunds(Exception exception) {
+        if (exception instanceof TransactionException) {
+            Optional<TransactionReceipt> optionalReceipt = ((TransactionException) exception).getTransactionReceipt();
+
+            if (optionalReceipt.isPresent()) {
+                TransactionReceipt receipt = optionalReceipt.get();
+
+                if (receipt.getRevertReason().toLowerCase(Locale.US).contains("transfer value exceeded balance of sender")) {
+                    return true;
+                }
+            }
+        }
+
+        return exception.getMessage().toLowerCase(Locale.US).contains("insufficient funds");
     }
 
     private static Looper newLooper() {
