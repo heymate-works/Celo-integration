@@ -1,11 +1,8 @@
-# Celo-integration
-Shows sample integration with Celo for troubleshooting
+# Celo SDK
+An easy to use and understand SDK for integrating Android apps with Celo block-chain.
+All the methods inside the SDK are thread safe. Internally a single thread is used to handle communications with the block-chain. The callback methods are called within the main thread.
 
-This project is incomplete and under development.
-
-- CeloSDK works and can be used in a simple and understandable way.
-- CeloSDK needs some cleaning up.
-- Sample app is a mess. Do not try to use it.
+* The app module is not functional. It has been used by the developers to understand Celo and develop the SDK. *
 
 ## Working with accounts
 ```java
@@ -24,8 +21,6 @@ String mnemonic = celoAccount.getMnemonic();
 
 // Get private key from mnemonic
 celoAccount = CeloAccount.fromMnemonic(mnemonic);
-
-} 
 ```
 
 ## Communicating with Celo
