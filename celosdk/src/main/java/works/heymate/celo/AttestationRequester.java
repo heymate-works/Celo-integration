@@ -5,7 +5,6 @@ import android.util.Log;
 import org.bouncycastle.jcajce.provider.digest.Keccak;
 import org.celo.contractkit.ContractKit;
 import org.celo.contractkit.Utils;
-import org.celo.contractkit.contract.Attestations;
 import org.celo.contractkit.wrapper.AccountsWrapper;
 import org.celo.contractkit.wrapper.AttestationsWrapper;
 import org.celo.contractkit.wrapper.GasPriceMinimumWrapper;
@@ -140,26 +139,7 @@ class AttestationRequester {
 
         byte[] phoneHash = Utils.getPhoneHash(phoneNumber, salt);
 
-        boolean caseA = AttestationsWrapper.isAccountConsideredVerified(status, NUM_ATTESTATIONS_REQUIRED, DEFAULT_ATTESTATION_THRESHOLD).isVerified;
-        boolean vaseB = !AttestationsWrapper.isAccountConsideredVerified(status, NUM_ATTESTATIONS_REQUIRED, DEFAULT_ATTESTATION_THRESHOLD).isVerified;
-
-        if (caseA) {
-            Log.d("AAA", "AAAAAAA");
-        }
-
-        if (vaseB) {
-            Log.d("AAA", "BBBBBB");
-        }
-
         if (!AttestationsWrapper.isAccountConsideredVerified(status, NUM_ATTESTATIONS_REQUIRED, DEFAULT_ATTESTATION_THRESHOLD).isVerified) {
-
-            if (caseA) {
-                Log.d("AAA", "AAAAAAA");
-            }
-
-            if (vaseB) {
-                Log.d("AAA", "BBBBBB");
-            }
             withoutRevealing = false; // TODO Make sense of this
             if (status.completed > 0) {
                 try {
@@ -212,14 +192,6 @@ class AttestationRequester {
                     revealAttestations(contractKit, attestations, phoneNumber, salt);
                 }
             }
-        }
-
-        if (caseA) {
-            Log.d("AAA", "AAAAAAA");
-        }
-
-        if (vaseB) {
-            Log.d("AAA", "BBBBBB");
         }
 
         return new Tuple2<>(result, false);
