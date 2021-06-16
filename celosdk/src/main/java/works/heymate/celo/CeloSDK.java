@@ -7,9 +7,11 @@ import android.os.Looper;
 import android.os.Message;
 
 import org.celo.contractkit.ContractKit;
+import org.celo.contractkit.ContractKitOptions;
 import org.celo.contractkit.Utils;
 import org.celo.contractkit.wrapper.AttestationsWrapper;
 import org.web3j.crypto.Credentials;
+import org.web3j.protocol.Web3j;
 import org.web3j.protocol.http.HttpService;
 import org.web3j.utils.Convert;
 
@@ -410,7 +412,10 @@ public class CeloSDK {
             ContractKit contractKit;
 
             try {
-                contractKit = ContractKit.build(new HttpService(mCeloContext.networkAddress));
+                ContractKitOptions options = new ContractKitOptions.Builder()
+                        .setChainId(mCeloContext.chainId)
+                        .build();
+                contractKit = new ContractKit(Web3j.build(new HttpService(mCeloContext.networkAddress)), options);
 
                 contractKit.addAccount(mAccount);
             } catch (Throwable t) {
