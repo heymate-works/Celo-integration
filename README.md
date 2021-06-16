@@ -2,7 +2,7 @@
 An easy to use and understand SDK for integrating Android apps with Celo block-chain.
 All the methods inside the SDK are thread safe. Internally a single thread is used to handle communications with the block-chain. The callback methods are called within the main thread.
 
-* The app module is not functional. It has been used by the developers to understand Celo and develop the SDK. *
+*The app module is not functional. It has been used by the developers to understand Celo and develop the SDK.*
 
 ## Working with accounts
 ```java
